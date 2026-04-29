@@ -9,21 +9,21 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from model.control_types import FeedObservation
-from model.preheater_forward_model import PreheaterForwardConfig, PreheaterForwardModel
-from model.furnace_dynamic import furnace_outputs_from_omega
+from plant.python_model.material_model import feedstock_from_composition
+from plant.python_model.preheater import PreheaterForwardConfig, PreheaterForwardModel
+from plant.python_model.furnace import furnace_outputs_from_omega
 
 BASELINE_COMP = [0.20, 0.15, 0.15, 0.10, 0.20, 0.20]
 
 
 def _run_constant_case(*, Tg_C: float, vg_mps: float, dt_s: float, horizon_s: float = 1800.0):
     model = PreheaterForwardModel(PreheaterForwardConfig(n_cells=20, tau_residence_s=985.0, feed_delay_s=5.0))
-    model.initialize(BASELINE_COMP, omega_init=0.3218, T_solid_init_C=120.0, time_s=0.0)
+    model.initialize(feedstock_from_composition(0.0, BASELINE_COMP, source="test_composition"), omega_init=0.3218, T_solid_init_C=120.0, time_s=0.0)
     n = max(1, int(round(horizon_s / dt_s)))
     state = model.state()
     for k in range(n):
         t = (k + 1) * dt_s
-        feed = FeedObservation(time_s=t, composition=BASELINE_COMP)
+        feed = feedstock_from_composition(t, BASELINE_COMP, source="test_composition")
         state = model.step(feed, Tg_C, vg_mps, dt_s)
     T_avg, _, _ = furnace_outputs_from_omega(state.omega_out)
     return state.omega_out, T_avg

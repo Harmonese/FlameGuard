@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Plotting helpers re-exported from runtime.simulator."""
+"""Plotting helpers for simulation artifacts."""
 
 from .simulator import EventWindow, History, plot_history
 

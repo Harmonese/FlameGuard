@@ -1,1082 +1,692 @@
 # 稳燃宝（FlameGuard）
 
-稳燃宝（FlameGuard）是一套面向垃圾焚烧预热脱水过程的分层闭环控制系统。系统利用焚烧炉烟气余热对高含水率厨余垃圾进行预热与脱水，使进入主焚烧炉的垃圾含水率维持在适合长期稳定燃烧的区间内，同时尽量降低补热、循环风机和过度干燥带来的运行代价。
+稳燃宝（FlameGuard）是一个面向垃圾焚烧预热炉的闭环模型预测控制项目。系统利用主焚烧炉可提供的烟气余热，对进入主焚烧炉前的垃圾进行预热和脱水，并动态优化预热炉换热侧的烟气入口温度 `Tg` 与循环速度 `vg`，使焚烧炉温度、预热炉出口含水率、补热需求、辅助循环需求和风机代价保持在可接受范围内。
 
-当前工程按三层组织：
+项目的默认可运行对象是 Python 低阶 plant。控制器内部维护独立的 Python predictor，用于 NMPC 的快速滚动预测。Plant 与 predictor 是两套实现：plant 表示被控对象或其代理，predictor 表示控制器脑内模型。二者只通过 `domain/` 中的数据结构和接口语义连接。
+
+核心控制目标是：
 
 ```text
-model/       数学建模与代理模型层
-controller/  控制算法、观测器与优化器层
-runtime/     仿真运行、测试、绘图与指标统计层
-legacy/      历史实现与实验脚本归档
+主焚烧炉平均温度 T_avg ≥ 850 °C
+主温度目标 T_target = 873 °C
+预热炉出口湿基含水率 omega_b 与炉膛干基质量流率共同决定焚烧炉静态响应
+补热、补风和辅助循环作为允许的运行手段计入代价，而不是直接视为失败
 ```
-
-其中，`model/` 描述被控对象和物理代理模型，`controller/` 根据模型接口完成预测控制与优化决策，`runtime/` 负责把模型、控制器和测试场景连接成可运行闭环。该结构的核心原则是：**代理模型层和控制算法层解耦**。当前默认使用 Python 低阶代理模型；如果后续接入 COMSOL 联合仿真或实体设备，只要保持相同的数据接口和步进语义，控制层可以继续沿用。
 
 ---
 
-## 一、数学建模与 `model/` 层
-
-`model/` 层负责定义系统中的物理对象、代理模型、热工公式、数据结构和可替换模型接口。控制器不直接拥有这些物理公式，而是通过模型层提供的状态、输出和步进接口进行预测与优化。
-
-当前 `model/` 目录主要包括：
+## 目录结构
 
 ```text
-model/
-├── control_types.py          闭环数据结构：观测、命令、预热炉状态、MPC 决策
-├── model_types.py            工程常数、物料等效性质、资源边界、静态优化请求结构
-├── thermal_core.py           共享热工公式：烟气密度、质量流量、供热、需热、稳态代理
-├── interfaces.py             可替换模型接口协议
-├── material_model.py         六类垃圾组分到等效物料性质的映射
-├── furnace_dynamic.py        焚烧炉静态/动态代理模型
-├── preheater_forward_model.py 20 槽预热炉分布式 forward model
-├── resource_model.py         动态烟气资源与补热/循环诊断模型
-├── actuator_dynamic.py       rate limit + 一阶惯性执行器模型
-├── feed_preview.py           feed preview 供应器
-├── slot_drying_model.py      单槽位干燥模型，用于局部逆模型和诊断
-└── proxy_data/               COMSOL 回归与瞬态数据
+FlameGuard-main/
+├── domain/                 稳定数据契约与接口协议
+│   ├── types.py
+│   └── interfaces.py
+│
+├── plant/                  被控对象 backend
+│   ├── factory.py           PlantBackend 装配入口
+│   ├── python_model/        默认 Python 低阶 plant
+│   ├── comsol/              COMSOL backend 占位
+│   └── hardware/            实机 backend 占位
+│
+├── controller/             控制器
+│   ├── factory.py           estimator / operator / executor 装配入口
+│   ├── estimator/           状态估计与扰动估计
+│   ├── predictor/           控制器内部预测模型
+│   ├── operator/            NMPC / fallback 决策器
+│   └── executor/            控制设定到执行命令的安全适配
+│
+├── runtime/                闭环仿真、测试场景、telemetry、绘图
+│   ├── simulator.py
+│   ├── telemetry.py
+│   ├── plotting.py
+│   └── tests/
+│
+├── scripts/                建模与拟合脚本
+│   ├── fit_furnace_static_surrogate.py
+│   ├── furnace_static_surrogate_fit.json
+│   └── data/furnace_static_comsol/
+│
+├── README.md
+└── CHANGELOG.md
 ```
 
-### 1. 典型垃圾组分与等效物料模型
+---
 
-系统考虑六类典型厨余/生活垃圾组分：
+## 架构边界
 
-| 编号 | 类别 | 初始含水率 \(\omega_i\) | 175°C 下达到 20% 含水率时间 \(t_{ref,i}\) / min | 温度敏感性 \(s_i\) / min·°C⁻¹ |
-|---|---|---:|---:|---:|
-| 1 | 菜叶 | 0.948 | 12.1 | -0.132 |
-| 2 | 西瓜皮 | 0.948 | 17.7 | -0.251 |
-| 3 | 橙子皮 | 0.817 | 15.3 | -0.189 |
-| 4 | 肉 | 0.442 | 11.5 | -0.216 |
-| 5 | 杂项混合 | 0.773 | 16.3 | -0.210 |
-| 6 | 米饭 | 0.611 | 15.8 | -0.243 |
+### `domain/`
 
-输入组分向量为：
+`domain/` 定义跨层共享的数据语言，不包含物理公式或控制算法。主要类型包括：
 
-$$
-x=[x_1,x_2,x_3,x_4,x_5,x_6], \qquad \sum_{i=1}^6 x_i=1,\quad x_i\ge 0
-$$
+| 类型 | 作用 |
+|---|---|
+| `FeedstockObservation` | 入口垃圾物性观测，不暴露固定垃圾类别 |
+| `EquivalentProperties` | plant/predictor 内部使用的等效物料性质 |
+| `PreheaterState` | 20 槽预热炉状态 |
+| `PreheaterOutput` | 轻量预热炉出口信息，可用于没有完整 20 槽状态的 backend |
+| `FurnaceFeed` | 进入焚烧炉的质量流率与含水率输入 |
+| `FurnaceObservation` | 焚烧炉观测：`T_avg_C`, `T_stack_C`, `v_stack_mps` |
+| `PlantStepInput` | runtime 发给 plant backend 的一步输入 |
+| `PlantSnapshot` | plant backend 返回的观测快照 |
+| `StateEstimate` | 控制器内部状态估计 |
+| `PredictorBundle` | estimator 管理的 controller-side predictor 对象集合 |
+| `OperatorContext` | operator 每次决策所需的完整上下文 |
+| `ControlSetpoint` | operator 输出给 executor 的参考控制设定 |
+| `ActuatorCommand` | executor 输出给 plant 的实际命令 |
+| `MPCDecision` | NMPC 决策结果与预测摘要 |
 
-混合垃圾的等效初始含水率、参考干燥时间和温度敏感性定义为线性组合：
+### `plant/`
 
-$$
-\omega_0(x)=0.948x_1+0.948x_2+0.817x_3+0.442x_4+0.773x_5+0.611x_6
-$$
+`plant/` 表示外部被控对象。当前默认可运行 backend 是 `plant/python_model/`。COMSOL 与实机接入时，应实现同样的 `PlantBackend` 语义：
 
-$$
-t_{ref}(x)=12.1x_1+17.7x_2+15.3x_3+11.5x_4+16.3x_5+15.8x_6
-$$
+```text
+PlantStepInput(command, feedstock, dt)
+        ↓
+PlantBackend.step(...)
+        ↓
+PlantSnapshot(furnace_obs, optional preheater_state, optional preheater_output, resource, feedback, health)
+```
 
-$$
-s(x)=-0.132x_1-0.251x_2-0.189x_3-0.216x_4-0.210x_5-0.243x_6
-$$
+Plant backend 只负责表达外部对象的输入输出。它不实现 NMPC，不持有 controller predictor，也不直接调用 controller operator。
 
-混合垃圾在等效平均干燥温度 \(T_m\) 下达到 20% 含水率的参考动力学时间为：
+### `controller/`
 
-$$
-\tau_{20}(T_m,x)=t_{ref}(x)+s(x)(T_m-175)
-$$
+`controller/` 表示控制器自身。它由四部分组成：
 
-该模型由 `model/material_model.py` 实现，核心输出为：
+| 模块 | 职责 |
+|---|---|
+| `estimator/` | 从 `PlantSnapshot` 生成 `StateEstimate`，维护 controller-side predictor 状态，估计炉膛扰动 |
+| `predictor/` | 为 NMPC 提供可克隆、可 rollout 的预热炉、焚烧炉、执行器和资源模型 |
+| `operator/` | 根据 `OperatorContext` 做控制决策，默认主控为 block-SLSQP NMPC |
+| `executor/` | 将 `ControlSetpoint` 转换为带限幅、速率、一阶执行器动态和资源诊断的 `ActuatorCommand` |
+
+### `runtime/`
+
+`runtime/` 负责实验编排：构建场景，调用 `plant.factory.make_plant_backend()` 与 `controller.factory` 装配闭环，推进仿真，记录 telemetry，输出 CSV、metrics 和总览图。Runtime 可以了解测试场景，但不再手动实例化 Python plant 的 preheater/furnace/resource 内部模型，也不把 plant 内部模型当作 controller predictor 使用。
+
+---
+
+## 闭环顺序
+
+一次闭环采样周期的主流程为：
+
+```text
+Scenario composition schedule
+        ↓  测试适配器
+FeedstockObservation
+        ↓
+PlantStepInput(previous ActuatorCommand, feedstock, dt)
+        ↓
+PythonPlantBackend.step(...)
+        ↓
+PlantSnapshot
+        ↓
+ControllerStateEstimator.update(...)
+        ↓
+StateEstimate + PredictorBundle
+        ↓
+NonlinearMPCController.step_context(OperatorContext)
+        ↓
+MPCDecision / ControlSetpoint
+        ↓
+ControlExecutor.translate_setpoint(...)
+        ↓
+ActuatorCommand
+        ↓
+下一周期 PlantBackend.step(...)
+```
+
+NMPC 内部使用 `controller/predictor/` 做未来 600 s 左右的 rollout。每次优化求得未来多个控制块的 `Tg_ref_C` 和 `vg_ref_mps`，闭环只执行当前时刻的第一段设定。
+
+---
+
+## 入口垃圾协议
+
+控制协议使用垃圾物性，而不是固定垃圾类别。`FeedstockObservation` 包含：
 
 ```python
-EquivalentProperties(
-    omega0=...,              # 初始湿基含水率
-    tref_min=...,            # 175°C 下达到 20% 的参考时间
-    slope_min_per_c=...,     # 温度敏感性斜率
+FeedstockObservation(
+    time_s,
+    moisture_wb,
+    drying_time_ref_min,
+    drying_sensitivity_min_per_C,
+    bulk_density_kg_m3=None,
+    wet_mass_flow_kgps=None,
+    source="...",
+    confidence=1.0,
+    raw={...},
 )
 ```
 
-等效比热采用湿基加权：
+字段含义：
 
-$$
-c_{eq}(x)=(1-\omega_0)c_s+\omega_0 c_w
-$$
+| 字段 | 含义 |
+|---|---|
+| `moisture_wb` | 入口湿基含水率，范围 0~1 |
+| `drying_time_ref_min` | 参考干燥时间，单位 min |
+| `drying_sensitivity_min_per_C` | 干燥时间对温度的敏感性，单位 min/°C，通常为负 |
+| `bulk_density_kg_m3` | 垃圾堆积密度，可缺省 |
+| `wet_mass_flow_kgps` | 入口湿垃圾质量流率，可缺省 |
+| `source` | 物性来源，例如 `scenario`, `vision_ai`, `manual`, `lab_measurement` |
+| `confidence` | 物性估计可信度 |
+| `raw` | 原始识别、人工记录或调试数据，只用于日志和排查 |
 
-其中：
+`runtime/tests/` 中仍使用 6 类垃圾 composition 构造标准场景。composition 只属于测试适配器，进入 plant 和 controller 前会被转换为 `FeedstockObservation`。
 
-$$
-c_s=1.70\ \text{kJ/(kg·K)},\qquad c_w=4.1844\ \text{kJ/(kg·K)}
-$$
+---
 
-### 2. 焚烧炉稳态代理模型
+## 质量流率语义
 
-焚烧炉代理模型把进入主焚烧炉的垃圾湿基含水率映射为焚烧炉稳态燃烧状态。模型中使用两种含水率记号：
-
-- \(w\)：百分数形式，单位为 `%`；
-- \(\omega=w/100\)：湿基小数形式。
-
-COMSOL 稳态回归得到的焚烧炉稳态代理关系为：
-
-$$
-T_{stack}(w)=-14.412237w+1423.472316
-$$
-
-$$
-v_{stack}(w)=-0.215310w+25.332842
-$$
-
-$$
-T_{avg}(w)=-13.109632w+1294.871365
-$$
-
-$$
-\sigma(w)=-0.189997w+18.331239
-$$
-
-$$
-T_{min}(w)=-13.422320w+1330.692379
-$$
-
-$$
-T_{max}(w)=-16.072025w+1589.019616
-$$
-
-其中：
-
-- \(T_{avg}\)：燃烧核心区域平均温度，是控制系统的主要被控输出；
-- \(T_{stack}\)：烟囱出口平均温度，用于资源诊断和烟气可用温度估计；
-- \(v_{stack}\)：烟囱出口平均速度，用于自然烟气质量流量诊断；
-- \(T_{min},T_{max},\sigma\)：用于稳态安全边界与均匀性评估。
-
-当前代码中，这些稳态关系由 `model/thermal_core.py` 与 `model/furnace_dynamic.py` 提供。
-
-### 3. 焚烧炉动态代理模型
-
-焚烧炉动态模型描述进入主焚烧炉的垃圾含水率变化如何经过延迟与惯性反映到三路可测输出：
-
-$$
-y_f(t)=
-\begin{bmatrix}
-T_{avg}(t)\\
-T_{stack}(t)\\
-v_{stack}(t)
-\end{bmatrix}
-$$
-
-模型采用统一动态骨架：
-
-$$
-G_f(s)=\frac{e^{-\tau_f s}}{(\tau_{f1}s+1)(\tau_{f2}s+1)}
-\begin{bmatrix}
-K_{avg}\\
-K_{stack,T}\\
-K_{stack,v}
-\end{bmatrix}
-$$
-
-其中：
-
-$$
-\tau_f=5\ \text{s},\qquad \tau_{f1}=0.223\ \text{s},\qquad \tau_{f2}=75.412\ \text{s}
-$$
-
-$$
-K_{avg}=-13.109632,\quad K_{stack,T}=-14.412237,\quad K_{stack,v}=-0.215310
-$$
-
-`model/furnace_dynamic.py` 将该连续动态离散为：
-
-1. 以秒为物理单位的纯延迟；
-2. 快一阶惯性；
-3. 慢一阶惯性；
-4. 可选外部加性扰动。
-
-在 plant 仿真中，焚烧炉通常以 \(\Delta t=0.1\) s 推进；在 NMPC 预测中，模型允许更粗的预测步长，但延迟仍按物理秒数处理，避免把 5 s 延迟错误放大为多个预测大步。
-
-### 4. 焚烧炉稳定工作区间
-
-工程约束包括：
-
-1. 燃烧面最低温度不低于 850°C；
-2. 平均炉温不低于 850°C；
-3. 平均炉温不高于 1100°C；
-4. 燃烧面最高温度不高于 1100°C。
-
-由：
-
-$$
-T_{min}(w)\ge 850
-$$
-
-可得：
-
-$$
-w\le 35.81
-$$
-
-由：
-
-$$
-T_{avg}(w)\ge 850
-$$
-
-可得：
-
-$$
-w\le 33.93
-$$
-
-由：
-
-$$
-T_{avg}(w)\le 1100
-$$
-
-可得：
-
-$$
-w\ge 14.86
-$$
-
-由：
-
-$$
-T_{max}(w)\le 1100
-$$
-
-可得：
-
-$$
-w\ge 30.43
-$$
-
-因此稳态参考含水率区间为：
-
-$$
-30.43\%\le w\le 33.93\%
-$$
-
-对应湿基小数：
-
-$$
-0.30427\le \omega\le 0.33935
-$$
-
-稳态工作点取该区间中点：
-
-$$
-w_{ref}=32.18\%,\qquad \omega_{ref}=0.3218
-$$
-
-对应平均炉温目标：
-
-$$
-T_{set}=T_{avg}(32.18)=872.99^\circ\text{C}
-$$
-
-参考平均炉温区间为：
-
-$$
-850.00^\circ\text{C}\le T_{avg}\le 895.99^\circ\text{C}
-$$
-
-### 5. 预热炉结构与处理规模
-
-预热炉设备原型为卧式间接回转滚筒预热脱水炉，设置外夹套与内置导烟管两级传热面，烟气与垃圾不直接接触。主要几何参数为：
-
-| 参数 | 含义 | 数值 |
-|---|---|---:|
-| \(D\) | 主筒体内径 | 1.2 m |
-| \(L\) | 有效长度 | 3.2 m |
-| \(\phi\) | 工作充填率 | 0.14 |
-| \(d_t\) | 内置导烟管外径 | 0.168 m |
-| \(N_t\) | 导烟管数量 | 6 |
-| \(r_d\) | 预热炉主烟道半径 | 0.4 m |
-| \(r_s\) | 焚烧炉烟囱半径 | 0.3 m |
-
-主烟道截面积：
-
-$$
-A_d=\pi r_d^2=\pi\times0.4^2=0.503\ \text{m}^2
-$$
-
-烟囱截面积：
-
-$$
-A_s=\pi r_s^2=\pi\times0.3^2=0.2827\ \text{m}^2
-$$
-
-有效传热面积：
-
-$$
-A=\pi DL+6\pi d_tL=22.20\ \text{m}^2
-$$
-
-日处理量为 20 t/d，折算连续湿垃圾质量流量：
-
-$$
-\dot m_w=\frac{20000}{24\times3600}=0.2315\ \text{kg/s}
-$$
-
-湿垃圾体积密度取：
-
-$$
-\rho_b=450\ \text{kg/m}^3
-$$
-
-炉内平均滞留量：
-
-$$
-M_h=\rho_b\phi\frac{\pi D^2}{4}L=228.0\ \text{kg}
-$$
-
-平均停留时间：
-
-$$
-\tau_r=\frac{M_h}{\dot m_w}=985.0\ \text{s}=16.42\ \text{min}
-$$
-
-### 6. 预热炉 20 槽分布式 forward model
-
-`model/preheater_forward_model.py` 将预热炉沿轴向离散为 20 个槽位。每个槽位携带：
+预热炉入口湿质量流率以日处理量换算为连续质量流：
 
 ```text
-omega              当前湿基含水率
-T_solid_C          当前固体/垃圾等效温度
-omega0             该物料初始等效含水率
-tref_min           该物料参考干燥时间
-slope_min_per_c    该物料温度敏感性
-residence_left_s   该槽位剩余停留时间
+wet_mass_flow_kgps = daily_wet_feed_kg / 86400
 ```
 
-第 \(i\) 个槽位状态记为：
-
-$$
-x_i(t)=\{\omega_i(t),T_{s,i}(t),\omega_{0,i},t_{ref,i},s_i,\tau_{rem,i}\}
-$$
-
-#### 6.1 前端 feed delay
-
-入口组分测量点到预热炉入口存在约 5 s 前端延迟：
-
-$$
-x_{pre,in}(t)=x_{in}(t-5)
-$$
-
-当前实现使用真实时间队列 `feed_delay_buffer`，而不是用轴向 cell residence bucket 近似 5 s 延迟。每次 `step()` 时，模型从队列中取 \(t-\tau_x\) 附近的等效物料性质，并在必要时进行线性插值。
-
-#### 6.2 轴向输送与数值混合
-
-每个槽位时间尺度为：
-
-$$
-\tau_{cell}=\frac{\tau_r}{N}=\frac{985}{20}=49.25\ \text{s}
-$$
-
-令：
-
-$$
-\gamma=\min\left(\frac{\Delta t}{\tau_{cell}},1\right)
-$$
-
-下游槽位按上游槽位混入推进：
-
-$$
-z_i^{k+1}=(1-\gamma)z_i^k+\gamma z_{i-1}^k
-$$
-
-入口槽位则向延迟后的入口物料性质靠近。这里 \(z_i\) 代表 \(\omega_i,T_{s,i},\omega_{0,i},t_{ref,i},s_i\) 等状态量。
-
-#### 6.3 烟气沿程冷却
-
-烟气入口温度为 \(T_{g,in}\)，循环/换热侧速度为 \(v_g\)。烟气从入口依次经过 20 个槽位。第 \(i\) 个槽位入口烟气温度为 \(T_{g,i}\)，传热功率为：
-
-$$
-Q_i=U(v_g)A_i\max(T_{g,i}-T_{s,i},0)
-$$
-
-其中：
-
-$$
-U(v_g)=18.97+20.09v_g^{0.65}
-$$
-
-$$
-A_i=\frac{A}{N}
-$$
-
-烟气质量流量按预热炉换热侧循环速度估算：
-
-$$
-\dot m_g=\rho_g(T_{g,in})A_dv_g
-$$
-
-烟气沿程降温：
-
-$$
-T_{g,i+1}=T_{g,i}-\frac{Q_i}{\dot m_gc_{pg}}
-$$
-
-为避免非物理反转，代码中限制：
-
-$$
-T_{g,i+1}\ge T_{s,i}+10^{-3}
-$$
-
-模型输出 `Tg_profile_C`，包含入口到出口的烟气温度剖面。
-
-#### 6.4 固体升温与脱水
-
-槽位接收热量：
-
-$$
-E_i=Q_i\Delta t
-$$
-
-固体温度低于 100°C 时，热量优先用于显热升温：
-
-$$
-E_{sens}=M_i c_{eq}(100-T_{s,i})
-$$
-
-超过蒸发温度后，模型将高温热量的主要部分用于蒸发，当前比例为 0.85：
-
-$$
-E_{evap}=0.85E_i
-$$
-
-蒸发水量：
-
-$$
-\Delta m_{evap}=\frac{E_{evap}}{\lambda}
-$$
-
-对应含水率下降量按湿基近似折算，并同时受实验动力学限制：
-
-$$
-\Delta\omega_i\le \frac{(\omega_i-0.20)\Delta t}{\tau_{20}(T_{s,i})}
-$$
-
-最终含水率限制在模型适用范围：
-
-$$
-0.20\le \omega_i\le0.98
-$$
-
-固体温度限制为：
-
-$$
-20^\circ\text{C}\le T_{s,i}\le250^\circ\text{C}
-$$
-
-#### 6.5 模型输出
-
-`PreheaterForwardModel.step(feed,Tg,vg,dt)` 返回 `PreheaterState`：
+默认配置为：
 
 ```text
-time_s            当前时间
-cells             20 个 PreheaterCellState
-omega_out         出口槽位湿基含水率
-T_solid_out_C     出口槽位固体温度
-Tg_profile_C      烟气沿程温度剖面
+daily_wet_feed_kg = 20000 kg/day
+wet_mass_flow_kgps ≈ 0.2315 kg/s
 ```
 
-该输出直接进入焚烧炉动态模型。
+`SimConfig.wet_mass_flow_override_kgps` 可用于扫描或 what-if 实验。没有 override 时，runtime 使用日处理量公式生成 `FeedstockObservation.wet_mass_flow_kgps`。
 
-### 7. 烟气资源、补热与循环诊断模型
-
-`model/resource_model.py` 将焚烧炉观测量转化为自然烟气资源边界。给定：
+预热炉出口质量流率由模型库存计算：
 
 ```text
-FurnaceObservation(time_s,T_avg_C,T_stack_C,v_stack_mps)
+dry_out_kgps   = 出口干基质量流率
+water_out_kgps = 出口水分质量流率
+wet_out_kgps   = dry_out_kgps + water_out_kgps
+omega_out      = water_out_kgps / wet_out_kgps
 ```
 
-自然可用温度和速度定义为：
-
-$$
-T_{stack,avail}=\max(T_{min},T_{stack}-\Delta T_{loss})
-$$
-
-$$
-v_{stack,avail}=\max(v_{min},\eta_v v_{stack})
-$$
-
-自然烟气质量流量诊断为：
-
-$$
-\dot m_{stack,avail}=\rho_g(T_{stack,avail})A_sv_{stack,avail}
-$$
-
-资源模型同时给出有效控制边界：
-
-$$
-T_{g,cap}^{eff}=T_{aux,max}
-$$
-
-$$
-v_{g,cap}^{eff}=12\ \text{m/s}
-$$
-
-当前控制解释中，\(v_g\) 表示预热炉换热侧循环速度或局部流速，不再被自然烟囱一次通过质量流量硬裁剪。自然烟气质量流量不足时，系统记录循环/补偿需求：
-
-$$
-\dot m_{aux}=\max(\dot m_{preheater}-\dot m_{stack,avail},0)
-$$
-
-其中：
-
-$$
-\dot m_{preheater}=\rho_g(T_g)A_dv_g
-$$
-
-当自然烟气温度低于目标入口温度时，补热功率为：
-
-$$
-Q_{aux}=\dot m_{preheater}c_{pg}\max(T_g-T_{stack,avail},0)
-$$
-
-因此，资源模型区分三类诊断：
-
-1. 自然烟气温度是否足够；
-2. 自然烟气一次通过质量流量与换热侧循环流量是否匹配；
-3. 补热功率、循环需求与风机经济代价。
-
-当前风机/循环代价采用三次方诊断模型：
-
-$$
-P_{fan}=P_{fan,ref}\left(\frac{v_g}{v_{g,max}}\right)^3
-$$
-
-其中 \(P_{fan,ref}=18\) kW，\(v_{g,max}=12\) m/s。
-
-### 8. 执行器动态模型
-
-`model/actuator_dynamic.py` 描述控制器参考设定 \(T_{g,ref},v_{g,ref}\) 到实际执行命令 \(T_{g,cmd},v_{g,cmd}\) 的过渡过程。
-
-执行器包含两部分：
-
-1. 变化率限制；
-2. 一阶惯性。
-
-温度通道：
-
-$$
-G_T(s)=\frac{1}{3s+1}
-$$
-
-速度通道：
-
-$$
-G_v(s)=\frac{1}{s+1}
-$$
-
-离散形式为：
-
-$$
-u_{act}^{k+1}=u_{act}^{k}+\alpha(u_{rl}^{k}-u_{act}^{k})
-$$
-
-$$
-\alpha=1-e^{-\Delta t/\tau}
-$$
-
-其中 \(u_{rl}\) 为经过 rate limit 后的中间状态。
-
-默认速率约束为：
-
-$$
-\left|\frac{dT_g}{dt}\right|\le20\ ^\circ\text{C/s}
-$$
-
-$$
-\left|\frac{dv_g}{dt}\right|\le0.4\ \text{m/s}^2
-$$
-
-执行器输出 `ActuatorCommand`，包括：
-
-```text
-Tg_cmd_C
-vg_cmd_mps
-Q_heat_deficit_kW
-resource_limited
-mdot_preheater_kgps
-mdot_stack_cap_kgps
-mdot_aux_flow_kgps
-fan_circulation_power_kW
-```
-
-### 9. Feed preview 模型
-
-`model/feed_preview.py` 提供预测视界内的入口垃圾组分序列。
-
-当前实现包括：
-
-```text
-ConstantFeedPreview       未来 feed 组分保持当前值
-KnownScheduleFeedPreview  根据测试场景 schedule 生成未来 feed
-```
-
-接口语义为：
+焚烧炉输入使用工程变量 `FurnaceFeed`：
 
 ```python
-get(time_s, horizon_s, dt_s) -> list[FeedObservation]
+FurnaceFeed(
+    omega_b,
+    mdot_d_kgps,
+    mdot_water_kgps,
+    mdot_wet_kgps,
+    rd,
+)
 ```
-
-控制器在 NMPC rollout 中使用该序列，而不是默认未来 feed 永远不变。
-
----
-
-## 二、控制算法与 `controller/` 层
-
-`controller/` 层负责根据当前观测、模型状态和运行策略求解控制输入。该层只调用模型接口，不拥有物理对象本身。
-
-当前目录结构为：
-
-```text
-controller/
-├── nmpc_controller.py        主控制器：control-blocking nonlinear MPC
-├── mpc_controller.py         fallback lookup-assisted MPC
-├── estimators/               扰动观测器
-└── optimizer/                NMPC 辅助优化器、context lookup、legacy static optimizer 兼容入口
-```
-
-### 1. 闭环控制目标
-
-控制目标是通过调节预热炉烟气入口温度和循环速度：
-
-$$
-u(t)=\begin{bmatrix}T_g(t)\\v_g(t)\end{bmatrix}
-$$
-
-影响预热炉出口垃圾含水率：
-
-$$
-\omega_{out}(t)
-$$
-
-再经焚烧炉动态模型影响：
-
-$$
-T_{avg}(t),\quad T_{stack}(t),\quad v_{stack}(t)
-$$
-
-主要控制目标为：
-
-1. 使 \(T_{avg}\) 接近 \(T_{set}=872.99^\circ\)C；
-2. 保持 \(T_{avg}\) 在参考带 \(850\\sim895.99^\circ\)C 内；
-3. 避免触碰安全带 \(850\\sim1100^\circ\)C；
-4. 减少过高 \(T_g\)、过高 \(v_g\)、补热、循环风机和剧烈动作带来的经济代价；
-5. 在湿料阶跃、炉温扰动和冷启动场景中保持恢复能力。
-
-### 2. 扰动观测器
-
-`controller/estimators/furnace_disturbance_observer.py` 实现残差型扰动观测器。仿真中存在真实扰动 \(d(t)\)，但控制器不直接读取测试脚本中的真实扰动，而是通过观测残差估计：
-
-$$
-\hat d(k)=(1-\alpha)\hat d(k-1)+\alpha(y_{meas}(k)-y_{nom}(k))
-$$
 
 其中：
 
-- \(y_{meas}\)：带扰动 plant 输出；
-- \(y_{nom}\)：并行无扰动 furnace twin 输出；
-- \(\alpha\)：低通系数，默认 0.05。
-
-估计结果包含：
-
 ```text
-disturbance_est_Tavg_C
-disturbance_est_Tstack_C
-disturbance_est_vstack_mps
+omega_b = 焚烧炉入口湿基含水率
+mdot_d_kgps = 进入焚烧炉的干基垃圾质量流率
+rd = mdot_d_kgps / mdot_d_ref_kgps
 ```
 
-NMPC rollout 使用估计扰动，而不是测试场景中的真实扰动 schedule。
-
-### 3. NMPC 控制器
-
-主控制器为 `controller/nmpc_controller.py` 中的 `NonlinearMPCController`。它采用 control-blocking nonlinear MPC：
-
-- 预测视界：\(H=600\) s；
-- 决策网格：\(\Delta t_{pred}=20\) s；
-- 内部 rollout 子步：\(\Delta t_{rollout}=5\) s；
-- 控制块边界：\(0,120,300,480,600\) s；
-- 优化变量：4 个控制块的 \(T_g,v_g\)。
-
-决策向量为：
-
-$$
-z=[T_{g,1},v_{g,1},T_{g,2},v_{g,2},T_{g,3},v_{g,3},T_{g,4},v_{g,4}]^T
-$$
-
-每个控制块内，参考控制量保持常值。NMPC 每次优化一段未来控制序列，但每次闭环只执行当前时刻对应的首段控制，并在后续时刻滚动更新。
-
-### 4. NMPC 预测流程
-
-对每个候选控制序列 \(z\)，控制器执行以下预测：
-
-```text
-复制当前 preheater model
-复制当前 furnace model
-复制当前 actuator model
-生成 feed preview
-for k in prediction horizon:
-    读取当前 block 的 Tg_ref, vg_ref
-    根据预测 furnace output 计算 resource state
-    actuator dynamic 推出 Tg_cmd, vg_cmd
-    preheater forward model 推进 20 槽状态
-    furnace dynamic model 推进 T_avg/T_stack/v_stack
-    累加温度误差、安全惩罚、参考带惩罚、含水率偏差、能耗和风机代价
-```
-
-该过程直接使用完整 20 槽预热炉 forward model，不再把单个代表槽位作为主决策对象。
-
-### 5. NMPC 目标函数
-
-NMPC 代价函数由以下部分组成：
-
-#### 5.1 平均炉温跟踪项
-
-$$
-J_T=\sum_k q_T(T_{avg,k}-T_{set})^2
-$$
-
-#### 5.2 参考带惩罚
-
-$$
-J_{ref}=\sum_k q_{ref}\left[\max(0,T_{avg,k}-T_{ref,high})^2+\max(0,T_{ref,low}-T_{avg,k})^2\right]
-$$
-
-#### 5.3 安全带惩罚
-
-$$
-J_{safe}=\sum_k q_{safe}\left[\max(0,T_{avg,k}-T_{safe,high})^2+\max(0,T_{safe,low}-T_{avg,k})^2\right]
-$$
-
-#### 5.4 出口含水率辅助项
-
-$$
-J_\omega=\sum_k q_\omega(\omega_{out,k}-\omega_{ref})^2
-$$
-
-#### 5.5 热功率和补热经济项
-
-$$
-J_E=\sum_k r_E P(T_{g,k},v_{g,k})
-$$
-
-$$
-J_{aux}=\sum_k r_{aux}Q_{aux,k}^2
-$$
-
-#### 5.6 高流速与风机/循环代价
-
-为了保留高 \(v_g\) 的应急能力，同时避免参考带内长期高流速运行，引入经济速度与高流速惩罚：
-
-$$
-J_{v,eco}=\sum_k r_{eco}\max(v_{g,k}-v_{eco},0)^2
-$$
-
-$$
-J_{v,high}=\sum_k r_{high}\max(v_{g,k}-v_{high},0)^2
-$$
-
-其中默认：
-
-$$
-v_{eco}=8.0\ \text{m/s},\qquad v_{high}=8.5\ \text{m/s}
-$$
-
-风机/循环功率惩罚为：
-
-$$
-J_{fan}=\sum_k r_{fan}P_{fan,k}
-$$
-
-参考带内经济权重会放大，使系统在温度已经合格时更倾向于降低 \(v_g\)、补热和循环代价。
-
-#### 5.7 动作变化惩罚
-
-$$
-J_{\Delta u}=\sum_j r_{\Delta T}(T_{g,j}-T_{g,j-1})^2+r_{\Delta v}(v_{g,j}-v_{g,j-1})^2
-$$
-
-### 6. 优化器与 fallback
-
-NMPC 使用 `scipy.optimize.minimize(method="SLSQP")` 求解控制块序列。优化边界为：
-
-$$
-100\le T_g\le930
-$$
-
-$$
-3\le v_g\le12
-$$
-
-优化初值池包括：
-
-1. 上一轮控制序列平移；
-2. nominal 控制 \(800^\circ\)C / \(12\) m/s；
-3. 上一时刻执行命令；
-4. 低温时的高温高流速恢复初值；
-5. 高温时的低温低流速降温初值。
-
-当 SLSQP 不可用或求解失败时，系统可调用 `controller/mpc_controller.py` 中的 fallback lookup-assisted MPC。fallback 通过动态查表或在线逆模型给出候选控制，并用完整 forward model 进行评分。
-
-### 7. Context-aware inverse optimizer
-
-`controller/optimizer/` 中保留 context-aware inverse optimizer 和 lookup table 工具。其作用是：
-
-1. 作为 NMPC 初值或 fallback 候选来源；
-2. 辅助解释某一模型状态下达到目标含水率所需的入口工况；
-3. 支持后续离线制表。
-
-该工具评估控制量时使用完整预热炉 forward rollout，因此能够考虑：
-
-```text
-20 槽库存状态
-烟气沿程冷却
-上游槽位吸热
-feed preview
-资源边界
-```
-
-主闭环决策仍由 `NonlinearMPCController` 完成。
+`rd` 是 COMSOL 静态代理模型的归一化坐标和诊断量。工程分析和图表优先使用 `mdot_d_kgps`。
 
 ---
 
-## 三、测试流程与 `runtime/` 层
+## Python plant 建模
 
-`runtime/` 层负责将模型、控制器和测试场景组合成完整仿真闭环。当前目录为：
+`plant/python_model/` 包含默认被控对象模型。
 
-```text
-runtime/
-├── simulator.py       主仿真循环、history、metrics、artifact 保存
-├── execution_adapter.py 控制设定到执行器命令的适配
-├── telemetry.py       指标与 telemetry 导出入口
-├── plotting.py        绘图入口
-├── results/           运行后生成的结果目录
-└── tests/             场景测试入口
-```
+### 预热炉
 
-### 1. 闭环仿真主流程
-
-`runtime/simulator.py` 的 `run_case()` 是主要仿真入口。一个仿真步内执行：
+预热炉由 `PreheaterForwardModel` 表示，是一个 20 槽轴向分布模型。每个 cell 保存：
 
 ```text
-1. 根据 scenario 读取当前 feed composition 和真实扰动；
-2. PreheaterForwardModel 使用上一时刻 ActuatorCommand 推进；
-3. FurnaceDyn 根据 omega_out 推进 T_avg/T_stack/v_stack；
-4. 并行 disturbance-free furnace twin 生成 nominal observation；
-5. FurnaceDisturbanceObserver 更新扰动估计；
-6. ResourceModel 根据当前观测生成自然资源与有效资源边界；
-7. NMPC 周期性重优化 Tg/vg 控制序列；
-8. ExecutionAdapter / TranscriberB 调用 ActuatorDynamic 生成 ActuatorCommand；
-9. 记录 telemetry、控制源、资源诊断、补热、循环、feed 和扰动信息。
+omega
+T_solid_C
+omega0
+tref_min
+slope_min_per_C
+dry_mass_kg
+water_mass_kg
+bulk_density_kg_m3
+residence_left_s
 ```
 
-仿真使用三个主要时间尺度：
+主要过程包括：
 
-| 参数 | 默认值 | 含义 |
-|---|---:|---|
-| `dt_meas_s` | 0.1 s | plant 动态积分与测量步长 |
-| `dt_opt_s` | 2.0 s | 控制设定更新检查步长 |
-| `mpc_dt_s` | 20.0 s | NMPC 决策网格 |
-| `nmpc_rollout_dt_s` | 5.0 s | NMPC 内部 forward rollout 子步 |
-| `nmpc_reoptimize_s` | 60.0 s | NMPC 重优化周期 |
+1. feed delay：入口垃圾物性存在约 5 s 进入延迟；
+2. 轴向输送：用 residence time 将垃圾从 cell 0 推向 cell 19；
+3. 逆流烟气换热：默认烟气从出口侧向入口侧流动；
+4. 显热升温与潜热蒸发：100°C 以下优先升温，到达蒸发条件后脱水；
+5. 出口质量流率诊断：输出干基、水分和湿基质量流率。
 
-### 2. 执行适配层
+当前低阶预热炉代理模型允许垃圾继续深度干燥，残余湿基含水率下限为 `omega_min = 0.05`。这个下限只用于避免数值上出现完全无水或负水分，并不再把出口含水率硬限制在 20%。plant 和 controller predictor 使用相同默认值；未来如果需要更保守或更激进的干燥能力，应同时调整两侧配置。
 
-`runtime/execution_adapter.py` 中的 `TranscriberB` 作为执行适配器存在。它接收 `ControlSetpoint`：
+### 焚烧炉
+
+焚烧炉由静态 COMSOL surrogate 加低阶动态壳组成。
+
+静态输入为：
 
 ```text
-Tg_ref_C
-vg_ref_mps
-T_stack_available_C
-v_stack_available_mps
-mdot_stack_cap_kgps
+omega_b                 焚烧炉入口湿基含水率
+mdot_d_furnace_kgps     进入焚烧炉的干基质量流率
 ```
 
-然后调用 `ActuatorDynamic.step()`，输出 `ActuatorCommand`。该命令是 plant 真实使用的输入。
-
-### 3. 测试场景
-
-测试入口位于：
+内部将 `mdot_d_furnace_kgps` 转换为：
 
 ```text
-runtime/tests/
+rd = mdot_d_furnace_kgps / mdot_d_ref_kgps
 ```
 
-当前主要场景包括：
-
-| 文件 | 场景 |
-|---|---|
-| `test_case_steady_hold.py` | 无扰动长时间稳态保持 |
-| `test_case_feed_step_change.py` | 入口垃圾变湿阶跃 |
-| `test_case_furnace_temp_temporary_disturbance.py` | 临时炉温扰动 |
-| `test_case_furnace_temp_permanent_disturbance.py` | 永久炉温扰动 |
-| `test_case_cold_start.py` | 低温初始状态恢复 |
-| `test_preheater_timestep_invariance.py` | 预热炉模型时间步长一致性诊断 |
-
-运行单个时间步一致性测试：
-
-```bash
-python3.14 -m runtime.tests.test_preheater_timestep_invariance
-```
-
-运行完整测试套件：
-
-```bash
-python3.14 -m runtime.tests.run_all_cases
-```
-
-### 4. 输出文件
-
-默认输出目录：
+静态输出包括：
 
 ```text
-runtime/results/
-```
-
-每个测试场景生成：
-
-```text
-<case>_timeseries.csv
-<case>_metrics.csv
-<case>.png
-```
-
-完整套件额外生成：
-
-```text
-suite_summary.csv
-```
-
-### 5. Timeseries 主要字段
-
-CSV 中包含：
-
-```text
-time_s
 T_avg_C
 T_stack_C
 v_stack_mps
-T_set_C
-omega_out
-omega_target
-Tg_cmd_C
-vg_cmd_mps
-Tavg_pred_C
-control_source
-control_note
+T_surface_min_C
+T_surface_max_C
+T_surface_std_C
 ```
 
-资源与执行器诊断包括：
+动态壳保留：
+
+```text
+5 s dead time
+0.223 s fast lag
+75.412 s slow lag
+```
+
+这使焚烧炉不会瞬时跳到静态代理输出，而是保留温度和烟囱响应的低阶动态。
+
+### 烟气资源
+
+`ResourceModel` 从 `FurnaceObservation` 计算自然烟气资源：
 
 ```text
 T_stack_available_C
 v_stack_available_mps
 mdot_stack_available_kgps
-mdot_preheater_cmd_kgps
-resource_limited
-aux_heat_enable
-heater_deficit_kW
-mdot_aux_flow_kgps
-fan_circulation_power_kW
 ```
 
-扰动诊断包括：
+执行器使用这些资源做补热和辅助循环诊断。当前语义为：
 
-```text
-disturbance_Tavg_C
-disturbance_Tstack_C
-disturbance_vstack_mps
-disturbance_est_Tavg_C
-disturbance_est_Tstack_C
-disturbance_est_vstack_mps
-```
+| 指标 | 含义 |
+|---|---|
+| `aux_heat_enable` | 自然烟气温度不足，需要辅助补热 |
+| `Q_aux_heat_kW` | 补热功率估计 |
+| `mdot_aux_flow_kgps` | 自然烟气质量流量不足时的辅助循环需求 |
+| `fan_circulation_power_kW` | 循环速度对应的风机/循环功率诊断 |
+| `aux_resource_required` | 存在补热或辅助循环需求的综合标记 |
 
-feed 诊断包括：
-
-```text
-feed_x1 ... feed_x6
-slot_omega0
-```
-
-### 6. Metrics 主要指标
-
-每个场景按 full、pre_event、event_window、post_event、tail、recovery 等区段输出指标。常用字段为：
-
-```text
-duration_s
-Tavg_MAE_C
-Tavg_RMSE_C
-Tavg_mean_C
-Tavg_min_C
-Tavg_max_C
-Tavg_pp_C
-ratio_in_ref_band
-ratio_in_safe_band
-ratio_in_supervision_band
-omega_req_tv
-Tg_cmd_tv
-recovery_to_safe_s
-recovery_to_ref_s
-overshoot_crossings
-aux_flow_mean_kgps
-aux_flow_max_kgps
-fan_power_mean_kW
-fan_energy_kJ
-heater_deficit_energy_kJ
-```
-
-这些指标用于评估：
-
-1. 稳态精度；
-2. 调整时间；
-3. 超调和安全带越界；
-4. 命令平滑性；
-5. 补热、循环和风机经济代价；
-6. 预测模型与真实 plant 的一致性。
-
-### 7. 绘图内容
-
-每个场景图包含：
-
-1. 平均炉温与参考/安全区间；
-2. 出口含水率与目标含水率；
-3. \(T_g\) 命令；
-4. \(v_g\) 命令；
-5. 入口 feed 组分；
-6. 补热、循环流量和风机功率诊断。
-
-资源诊断子图用于区分：
-
-- 温度资源不足导致的补热；
-- 自然烟气一次通过质量流量不足导致的循环/补偿需求；
-- 高循环速度对应的风机经济代价。
+`aux_resource_required` 不等价于控制失败。厨余垃圾高湿工况下，补热、补风和辅助循环可以是正常运行方式。Metrics 中同时输出 `aux_heat_required_ratio`、`aux_circulation_required_ratio` 和 `command_hard_clipped_by_resource_ratio`，用于区分运行成本与命令硬削弱。
 
 ---
 
-## 工程运行说明
+## Controller predictor
 
-建议使用项目根目录作为运行目录：
+`controller/predictor/` 是控制器内部模型，包含与 plant 相同类别的模块：预热炉、焚烧炉、执行器、资源、物料和热工公式。它们是 controller 自己的实现，不从 `plant/python_model/` import。
+
+Predictor 的职责是：
+
+```text
+从 StateEstimate 初始化控制器内部状态
+在 NMPC 中克隆
+按候选 Tg/vg 控制序列 rollout
+提供未来 T_avg、omega_out、资源需求和经济代价
+```
+
+Plant 与 predictor 使用相同接口语义，但允许参数和实现逐步分化。模型失配通过 estimator、扰动观测器和闭环反馈处理。
+
+---
+
+## State estimator
+
+`controller/estimator/state_estimator.py` 定义 `ControllerStateEstimator`。它负责：
+
+```text
+PlantSnapshot → StateEstimate
+```
+
+它始终向 operator 提供可预测的 20 槽 `preheater_state_est`。
+
+如果 plant snapshot 包含完整 `PreheaterState`，estimator 将其同步到 controller predictor。若没有完整 20 槽状态，estimator 使用 controller-side predictor digital twin，根据上周期实际命令或 actuator feedback 推进内部状态。
+
+Estimator 还维护：
+
+```text
+preheater_predictor
+furnace_predictor
+resource_model
+disturbance_observer
+```
+
+并通过 `get_predictor_bundle()` 交给 operator 使用。
+
+---
+
+## NMPC operator
+
+主控器为 `controller/operator/nmpc_operator.py` 中的 `NonlinearMPCController`。它是 control-blocking NMPC，默认设置包括：
+
+| 参数 | 默认值 |
+|---|---:|
+| prediction horizon | 600 s |
+| decision grid | 20 s |
+| rollout substep | 5 s |
+| control blocks | 0-120, 120-300, 300-480, 480-600 s |
+| reoptimize period | 60 s |
+| temperature target | 873 °C |
+| compliance lower bound | 850 °C |
+
+决策变量为每个控制块的：
+
+```text
+Tg_ref_C
+vg_ref_mps
+```
+
+Rollout 中每一步执行：
+
+```text
+candidate Tg/vg
+        ↓
+actuator dynamics + resource accounting
+        ↓
+preheater predictor step
+        ↓
+FurnaceFeed from preheater output
+        ↓
+furnace predictor step
+        ↓
+stage cost
+```
+
+代价函数主要包含：
+
+```text
+T_avg tracking
+reference band penalty
+safety band penalty
+dynamic omega target penalty
+auxiliary heat cost
+auxiliary circulation cost
+fan/circulation cost
+high-vg cost
+control movement cost
+terminal T_avg penalty
+```
+
+安全恢复区间采用状态依赖权重：当预测 `T_avg` 接近或低于 850 °C 合规下限时，NMPC 会显著降低补热、辅助循环、风机和高 `v_g` 的经济惩罚，同时提高低温安全惩罚。这让控制器在低温扰动后更果断地使用 1100 °C 辅助烟气和最大循环速度；回到安全区后再恢复经济运行权衡。
+
+### 动态含水率目标
+
+`omega_target` 由温度目标、当前预测干基质量流率和扰动估计反算：
+
+```text
+omega_target_from_T = inverse_surrogate(T_target_C - disturbance_est_Tavg_C, mdot_d_furnace_kgps)
+```
+
+因此水分目标随焚烧炉干基负荷和炉内扰动估计改变，而不是固定在某个旧参考含水率。负向永久扰动会要求更低的出口含水率。
+
+NMPC 还记录安全恢复诊断：
+
+```text
+safety_reachable           当前优化轨迹的 terminal T_avg 是否高于安全下限
+safety_margin_C            terminal predicted T_avg - T_safe_low_C
+omega_max_for_safety       在当前扰动估计和干基负荷下，达到安全下限所允许的最大出口含水率
+nmpc_pred_min/max_Tavg_C   预测视界内最低/最高炉温
+```
+
+当实测 `T_avg` 低于安全下限时，operator 不再无条件持有旧计划到完整 `reoptimize_s`，而是按 `emergency_reoptimize_interval_s` 触发更短间隔的 best-effort re-optimization。低温恢复时，NMPC 的初始候选还会显式加入 `Tg = Tg_max`、`vg = vg_max` 的全力恢复 seed，避免 SLSQP 在早期迭代里缓慢摸索最大恢复动作。
+
+---
+
+## Executor
+
+`controller/executor/executor.py` 将 `ControlSetpoint` 转换为实际 `ActuatorCommand`。执行器包含：
+
+```text
+Tg rate limit
+vg rate limit
+Tg first-order lag
+vg first-order lag
+Tg/vg bounds
+auxiliary heat accounting
+auxiliary circulation accounting
+fan/circulation power diagnostic
+```
+
+Plant 接收的是 executor 输出的 `ActuatorCommand`，不是 operator 原始参考值。
+
+Executor 还包含安全恢复 guard：当 runtime 判定实测炉温低于合规下限，或当前 NMPC 预测安全不可达且温度仍低于目标时，executor 会把参考值提升到 `1100 °C / 12 m/s` 并标记 `recovery_guard_active`。这是控制安全层的兜底动作，用于避免低温事件中等待经济 NMPC 缓慢加热；其触发比例会写入 telemetry 和 metrics。
+
+---
+
+## Runtime 测试与输出
+
+标准测试入口位于 `runtime/tests/`。
+
+运行单个 case：
 
 ```bash
-cd FlameGuard-main
-python3.14 -m runtime.tests.test_preheater_timestep_invariance
-python3.14 -m runtime.tests.run_all_cases
+python -m runtime.tests.test_case_steady_hold
+python -m runtime.tests.test_case_feed_step_change
+python -m runtime.tests.test_case_furnace_temp_temporary_disturbance
+python -m runtime.tests.test_case_furnace_temp_permanent_disturbance
+python -m runtime.tests.test_case_cold_start
 ```
 
-运行结果写入：
+运行全部标准 case：
+
+```bash
+python -m runtime.tests.run_all_cases
+```
+
+每个 case 的输出目录为：
 
 ```text
-runtime/results/
+runtime/results/<case_name>/
+├── overview.png
+├── timeseries.csv
+├── metrics.csv
+├── control_events.csv
+├── preheater_diagnostics.csv
+└── cell_snapshot.csv
 ```
 
-项目结构说明见：
+`overview.png` 包含 6 个 panel：
 
 ```text
-ARCHITECTURE.md
+furnace thermal response
+preheater outlet / heat-transfer diagnostics
+operator reference vs executor command
+stack resource / auxiliary heat / fan power
+disturbance observer
+cell snapshots
 ```
 
-历史代码归档说明见：
+`metrics.csv` 按 full、tail、event、post_event、recovery 等时间片统计：
 
 ```text
-legacy/LEGACY.md
+Tavg mean/min/max/RMSE
+ratio_in_ref_band
+ratio_T_ge_compliance_min
+omega_out mean/min/max
+mdot_furnace_dry_mean_kgps
+rd_used_mean
+omega_target_from_T_mean
+aux heat energy
+aux flow mean/max
+fan energy
+operator fallback ratio
+recovery guard ratio
+resource and auxiliary resource ratios
+command total variation
 ```
 
-版本整理记录见：
+---
+
+## COMSOL 焚烧炉静态代理
+
+`scripts/fit_furnace_static_surrogate.py` 用 COMSOL 批跑 CSV 拟合焚烧炉静态代理。
+
+输入数据目录：
 
 ```text
-CHANGELOG.md
+scripts/data/furnace_static_comsol/
 ```
+
+拟合报告：
+
+```text
+scripts/furnace_static_surrogate_fit.json
+```
+
+CSV 中温度单位为 K。脚本拟合前将温度输出转换为 °C；温度标准差按温差处理，K 与 °C 数值一致。
+
+静态代理使用二维三阶多项式：
+
+```text
+y = f(rd, omega_b)
+```
+
+COMSOL 扫描范围：
+
+```text
+rd      = 0.5 ~ 3.5
+w_b     = 0 ~ 50 %
+omega_b = w_b / 100
+```
+
+当前拟合误差摘要：
+
+| 输出 | train RMSE | LOO RMSE |
+|---|---:|---:|
+| `T_avg_C` | 0.763 °C | 1.009 °C |
+| `T_stack_C` | 2.223 °C | 3.065 °C |
+| `v_stack_mps` | 0.021 m/s | 0.032 m/s |
+| `T_surface_min_C` | 3.679 °C | 5.260 °C |
+| `T_surface_max_C` | 0.708 °C | 0.942 °C |
+| `T_surface_std_C` | 0.784 °C | 1.086 °C |
+
+重新拟合：
+
+```bash
+python scripts/fit_furnace_static_surrogate.py
+```
+
+---
+
+## 配置重点
+
+常用配置位于 `runtime/simulator.py::SimConfig` 和 `controller/operator/nmpc_operator.py::NMPCConfig`。
+
+| 配置 | 含义 | 默认值 |
+|---|---|---:|
+| `daily_wet_feed_kg` | 日处理湿垃圾质量 | 20000 kg/day |
+| `wet_mass_flow_kgps` | 连续湿垃圾质量流率，派生属性 | `daily_wet_feed_kg / 86400` |
+| `wet_mass_flow_override_kgps` | 质量流率扫描 override | `None` |
+| `T_target_C` | 主温度目标 | 873 °C |
+| `T_compliance_min_C` | 合规温度下限 | 850 °C |
+| `omega_ref` | 初始化兼容参考含水率 | 0.3218 |
+| `preheater_omega_min` / `OMEGA_MODEL_MIN` | 预热炉代理模型允许的残余湿基含水率下限；当前允许深度干燥但保持大于 0 | 0.05 |
+| `nominal_Tg_C` | 初始化/nominal 控制温度 | 800 °C |
+| `nominal_vg_mps` | 初始化/nominal 循环速度 | 12 m/s |
+| `preheater_warmup_s` | 预热炉库存 warmup 时间 | 6 residence times |
+| `nmpc_horizon_s` | NMPC 预测视界 | 600 s |
+| `nmpc_rollout_dt_s` | NMPC 内部 rollout 步长 | 5 s |
+| `nmpc_maxiter` | SLSQP 最大迭代次数 | 20 |
+| `emergency_reoptimize_interval_s` | 安全线以下的紧急重优化间隔 | 20 s |
+| `recovery_trigger_margin_C` | 预测温度进入安全恢复区间的提前量 | 20 °C |
+| `recovery_guard_exit_C` | recovery guard 退出滞回温度；避免在 850 °C 附近反复开关 | 865 °C |
+| `recovery_guard_min_hold_s` | recovery guard 进入后的最小保持时间 | 60 s |
+| `recovery_economy_multiplier` | 安全恢复区间内补热/补风/高风速经济代价倍率 | 0.02 |
+| `aux_Tg_max_C` | 补热后的有效 Tg 上限 | 1100 °C |
+| `compute_latency_mode` | 是否把控制器 wall-clock 求解耗时反馈到 plant 仿真时间；`none` 为理想仿真，`profile` 用实测耗时，`fixed` 用固定延迟 | `none` |
+| `fixed_compute_latency_s` | `compute_latency_mode="fixed"` 时每次控制更新的命令应用延迟 | 0 s |
+
+---
+
+## 扩展 backend
+
+### COMSOL backend
+
+`plant/comsol/backend.py` 应实现 `PlantBackend` 语义。COMSOL backend 负责：
+
+```text
+ActuatorCommand → COMSOL 边界条件
+FeedstockObservation → 入口物料边界
+transient solve → PlantSnapshot
+```
+
+返回的 `PlantSnapshot` 至少应包含 `FurnaceObservation`。若 COMSOL 可以输出预热炉场变量，可投影成 `PreheaterState`；若只输出出口量，可填 `PreheaterOutput`。
+
+### Hardware backend
+
+`plant/hardware/backend.py` 应把 `ActuatorCommand` 写入 PLC / OPC-UA / Modbus / DAQ / TCP 等接口，并从传感器读取：
+
+```text
+T_avg_C
+T_stack_C
+v_stack_mps
+optional preheater outlet measurement
+actuator feedback
+health/status
+```
+
+硬件 backend 通常不能提供完整 20 槽状态。Estimator 会用 controller-side predictor digital twin 维护可用于 NMPC 的 `preheater_state_est`。
+
+---
+
+## 开发约束
+
+1. `plant/python_model/` 与 `controller/predictor/` 保持两套实现，不抽 shared physics core。
+2. `controller/` 不 import `plant/python_model/`。
+3. `plant/` 不 import `controller/`。
+4. `runtime/` 负责装配和实验编排，不承担控制算法或物理公式所有权。
+5. `FeedstockObservation.raw` 只用于日志和排查，operator 不依赖 raw 字段。
+6. `rd` 是 COMSOL surrogate 坐标和诊断量，工程主变量为 `mdot_d_furnace_kgps`。
+7. 补热、补风、辅助循环是允许的运行方式，合规评价优先看 `T_avg ≥ 850 °C`、fallback、stale plan 和命令硬削弱。
+8. 后台 async NMPC 可以接受 SLSQP `success=False` 但代价有限、动作有界的 best-effort plan；`feasible` 表示优化器收敛状态，不等同于 plan 是否可执行。
+9. recovery guard 是 executor 安全层，采用滞回和最小保持时间，避免温度在安全线附近抖动时反复开关。
+
+---
+
+## 快速检查
+
+编译检查：
+
+```bash
+python -m compileall domain plant controller runtime scripts
+```
+
+预热炉步长诊断：
+
+```bash
+python -m runtime.tests.test_preheater_timestep_invariance
+```
+
+控制延迟诊断：
+
+```bash
+python -m runtime.tests.test_control_latency
+```
+
+同步 SLSQP 求解耗时诊断：
+
+```bash
+python -m runtime.tests.test_slsqp_solve_latency
+```
+
+默认参数使用短视界和低迭代数，便于快速确认 SLSQP 分段耗时；如需测试当前完整 NMPC 配置，可加 `--full-config`。
+
+计算耗时对闭环效果的影响诊断：
+
+```bash
+python -m runtime.tests.test_compute_latency_effect --delays 0,2,5,10,30
+```
+
+默认 runtime 是理想仿真：控制器求解消耗的真实 wall-clock 时间不会推进 plant。打开 `compute_latency_mode="profile"` 或 `"fixed"` 后，runtime 会在新命令生效前让 plant 继续按旧命令运行相应的模拟时间，并在 CSV/metrics 中输出 `operator_compute_wall_s`、`simulated_compute_latency_s`、`command_apply_delay_s`、`async_*plan*` 等诊断字段。
+
+steady hold：
+
+```bash
+python -m runtime.tests.test_case_steady_hold
+```
+

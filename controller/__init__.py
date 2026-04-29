@@ -1,8 +1,8 @@
+"""Controller layer: operator, predictor, estimator, executor."""
+
 try:
-    from .nmpc_controller import NMPCConfig, NonlinearMPCController
+    from .operator.nmpc_operator import NMPCConfig, NonlinearMPCController
 except Exception:  # pragma: no cover
     pass
-try:
-    from .mpc_controller import MPCConfig, MPCController
-except Exception:  # pragma: no cover
-    pass
+
+__all__ = ["NMPCConfig", "NonlinearMPCController"]
