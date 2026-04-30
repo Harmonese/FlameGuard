@@ -1,0 +1,467 @@
+\documentclass[UTF8,openany,zihao=-4,oneside]{ctexbook}
+
+% Page and typography
+\usepackage[a4paper,top=23mm,bottom=24mm,left=24mm,right=24mm,headheight=15pt,headsep=8mm,footskip=12mm]{geometry}
+\linespread{1.08}
+\raggedbottom
+\sloppy
+\emergencystretch=3em
+
+% Core packages
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs,longtable,array,tabularx,multirow,makecell}
+\usepackage{enumitem}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc,fit,shapes.geometric}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{titletoc}
+\usepackage{tocloft}
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{etoolbox}
+\usepackage{hyperref}
+\usepackage{bookmark}
+
+% Brand colors
+\definecolor{FGBlue}{HTML}{1F4E79}
+\definecolor{FGDeep}{HTML}{102A43}
+\definecolor{FGCyan}{HTML}{2E8BC0}
+\definecolor{FGOrange}{HTML}{D98A15}
+\definecolor{FGGray}{HTML}{F3F6F9}
+\definecolor{FGLine}{HTML}{D7E2EA}
+\definecolor{FGText}{HTML}{243B53}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=FGBlue,
+  urlcolor=FGCyan,
+  citecolor=FGOrange,
+  pdfauthor={FlameGuard},
+  pdftitle={FlameGuardWeb 用户手册},
+  pdfsubject={预热炉现场监视、垃圾组分校正、实时趋势与 Docker 部署},
+  pdfkeywords={FlameGuardWeb, 稳燃宝, 用户手册, 预热炉, 现场监视, Docker}
+}
+
+% Paragraph and list tuning
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.18em}
+\setlist{itemsep=0.15em,topsep=0.35em,leftmargin=2.2em}
+\renewcommand{\arraystretch}{1.22}
+\setlength{\tabcolsep}{5pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\AtBeginEnvironment{longtable}{\small\renewcommand{\arraystretch}{1.2}}
+
+% Pandoc compatibility and manual utilities
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\providecommand{\passthrough}[1]{#1}
+\newcommand{\manualdivider}{\par\vspace{0.6em}\noindent\textcolor{FGLine}{\rule{\linewidth}{0.7pt}}\vspace{0.6em}\par}
+\newcommand{\pathcode}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\notebox}[2]{\begin{tcolorbox}[enhanced,colback=FGBlue!4,colframe=FGBlue!45,boxrule=0.5pt,arc=1.5mm,left=4mm,right=4mm,top=3mm,bottom=3mm]\sffamily\textbf{\color{FGDeep}#1}\par\vspace{0.25em}\color{FGText}#2\end{tcolorbox}}
+\newcommand{\warnbox}[2]{\begin{tcolorbox}[enhanced,colback=FGOrange!6,colframe=FGOrange!55,boxrule=0.5pt,arc=1.5mm,left=4mm,right=4mm,top=3mm,bottom=3mm]\sffamily\textbf{\color{FGDeep}#1}\par\vspace{0.25em}\color{FGText}#2\end{tcolorbox}}
+
+% Captions
+\captionsetup{font=small,labelfont={bf,color=FGBlue},labelsep=quad}
+
+% Chapter / section styles
+\titleformat{\chapter}[display]
+  {\Huge\bfseries\sffamily\color{FGDeep}}
+  {\begin{tikzpicture}[baseline=(n.base)]\node[fill=FGBlue,text=white,rounded corners=1.5mm,inner xsep=8pt,inner ysep=5pt,font=\Large\bfseries\sffamily] (n) {第\thechapter 章};\end{tikzpicture}}
+  {0.85em}
+  {\Huge}
+  [\vspace{0.35em}{\color{FGOrange}\titlerule[1.2pt]}]
+\titlespacing*{\chapter}{0pt}{-4mm}{11mm}
+
+\titleformat{\section}
+  {\Large\bfseries\sffamily\color{FGBlue}}
+  {\thesection}{0.75em}{}
+  [\vspace{0.15em}{\color{FGLine}\titlerule[0.6pt]}]
+\titlespacing*{\section}{0pt}{2.1ex plus .4ex}{1.1ex}
+
+\titleformat{\subsection}
+  {\large\bfseries\sffamily\color{FGDeep}}
+  {\thesubsection}{0.75em}{}
+\titlespacing*{\subsection}{0pt}{1.8ex plus .3ex}{0.8ex}
+
+\titleformat{\subsubsection}
+  {\normalsize\bfseries\sffamily\color{FGDeep}}
+  {\thesubsubsection}{0.65em}{}
+\titlespacing*{\subsubsection}{0pt}{1.3ex plus .2ex}{0.55ex}
+
+% TOC styling
+\renewcommand{\cftchapfont}{\sffamily\bfseries\color{FGDeep}}
+\renewcommand{\cftsecfont}{\sffamily\color{FGText}}
+\renewcommand{\cftchappagefont}{\sffamily\bfseries\color{FGBlue}}
+\renewcommand{\cftsecpagefont}{\sffamily\color{FGText}}
+\setlength{\cftbeforechapskip}{0.45em}
+
+% Header / footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\sffamily\small\color{FGDeep}FlameGuardWeb 用户手册}
+\fancyhead[R]{\sffamily\small\color{FGBlue}\leftmark}
+\fancyfoot[L]{\sffamily\scriptsize\color{FGText}现场监视 · 组分校正 · 实时趋势}
+\fancyfoot[R]{\sffamily\small\bfseries\color{FGBlue}\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{FGLine}\leaders\hrule height \headrulewidth\hfill}}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[R]{\sffamily\small\bfseries\color{FGBlue}\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+}
+
+% Code listings
+\lstdefinestyle{fgcode}{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{FGGray},
+  frame=single,
+  rulecolor=\color{FGLine},
+  framerule=0.5pt,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  tabsize=2,
+  xleftmargin=1em,
+  xrightmargin=1em,
+  framexleftmargin=0.6em,
+  framexrightmargin=0.6em,
+  aboveskip=0.8em,
+  belowskip=0.8em
+}
+\lstset{style=fgcode}
+
+% Inline badges, aligned with the other manuals
+\newcommand{\fgbadge}[1]{\tcbox[colback=FGBlue!6,colframe=FGBlue!35,boxrule=0.4pt,arc=1mm,left=2pt,right=2pt,top=1pt,bottom=1pt,on line]{\sffamily\footnotesize #1}}
+
+% Manual-specific TikZ helpers
+\tikzset{
+  fgpanel/.style={draw=FGBlue!45,fill=FGBlue!5,rounded corners=2mm,line width=0.6pt},
+  fgtitle/.style={font=\sffamily\bfseries\small,text=FGDeep},
+  fgsmall/.style={font=\sffamily\scriptsize,text=FGText},
+  fgmetric/.style={font=\sffamily\bfseries\scriptsize,text=FGBlue},
+  fgarrow/.style={-{Latex[length=2.2mm]},line width=0.8pt,draw=FGCyan}
+}
+
+\begin{document}
+
+\begin{titlepage}
+\begin{tikzpicture}[remember picture,overlay]
+  \fill[FGDeep] (current page.north west) rectangle ([yshift=-88mm]current page.north east);
+  \fill[FGBlue] ([yshift=-88mm]current page.north west) rectangle ([yshift=-92mm]current page.north east);
+  \fill[FGOrange] ([yshift=-92mm]current page.north west) rectangle ([yshift=-94mm]current page.north east);
+  \fill[FGGray] ([yshift=-94mm]current page.north west) rectangle (current page.south east);
+  \draw[FGBlue!20,line width=1.2pt] ([xshift=18mm,yshift=-122mm]current page.north west) -- ([xshift=-18mm,yshift=-122mm]current page.north east);
+\end{tikzpicture}
+\vspace*{13mm}
+{\sffamily\bfseries\color{white}\fontsize{18}{22}\selectfont FlameGuard / 稳燃宝}\par
+\vspace{9mm}
+{\sffamily\bfseries\color{white}\fontsize{32}{42}\selectfont FlameGuardWeb 用户手册}\par
+\vspace{4mm}
+{\sffamily\color{white}\fontsize{15}{20}\selectfont 现场监视 · 垃圾组分校正 · 实时趋势 · Docker 部署}\par
+\vspace{36mm}
+\begin{tcolorbox}[enhanced,width=\textwidth,colback=white,colframe=FGLine,boxrule=0.7pt,arc=2mm,drop shadow={black!12!white},left=8mm,right=8mm,top=6mm,bottom=6mm]
+{\sffamily\bfseries\Large\color{FGDeep}v0.2.0 Beta}\par\vspace{0.6em}
+\end{tcolorbox}
+\vfill
+{\sffamily\color{FGText}文档版本：2026-04-30\hfill 适用版本：FlameGuardWeb v0.2.x}\par
+\end{titlepage}
+
+\frontmatter
+\chapter*{目录}
+\addcontentsline{toc}{chapter}{目录}
+\vspace{1.2em}
+\begin{longtable}{p{0.78\linewidth}r}
+\textbf{\textcolor{FGBlue}{第一章\quad 概述}} & \textbf{1} \\
+\quad 1.1 软件定位 & 1 \\
+\quad 1.2 适用人员 & 1 \\
+\quad 1.3 页面总览 & 1 \\
+\addlinespace[0.35em]
+\textbf{\textcolor{FGBlue}{第二章\quad 快速启动}} & \textbf{3} \\
+\quad 2.1 推荐启动方式 & 3 \\
+\quad 2.2 常用命令 & 3 \\
+\quad 2.3 基础配置 & 3 \\
+\addlinespace[0.35em]
+\textbf{\textcolor{FGBlue}{第三章\quad 页面功能说明}} & \textbf{5} \\
+\quad 3.1 左侧：物料监测与人工校正 & 5 \\
+\quad 3.2 中间：模型和实时趋势 & 5 \\
+\quad 3.3 右侧：组分比例和控制状态 & 6 \\
+\addlinespace[0.35em]
+\textbf{\textcolor{FGBlue}{第四章\quad 日常使用流程}} & \textbf{7} \\
+\quad 4.1 启动前检查 & 7 \\
+\quad 4.2 常规监视步骤 & 7 \\
+\quad 4.3 大屏和滚动 & 7 \\
+\addlinespace[0.35em]
+\textbf{\textcolor{FGBlue}{第五章\quad 常见问题与处理}} & \textbf{8} \\
+\quad 5.1 页面打不开 & 8 \\
+\quad 5.2 页面数据不刷新 & 8 \\
+\quad 5.3 底部内容看不到 & 8 \\
+\quad 5.4 组分提交失败 & 8 \\
+\quad 5.5 状态出现黄色或红色 & 9 \\
+\addlinespace[0.35em]
+\textbf{\textcolor{FGBlue}{第六章\quad 技术实现简述}} & \textbf{10} \\
+\quad 6.1 总体结构 & 10 \\
+\quad 6.2 主要接口 & 10 \\
+\quad 6.3 实时仿真和随机扰动 & 10 \\
+\quad 6.4 后续接入现场数据 & 10 \\
+\addlinespace[0.35em]
+\textbf{\textcolor{FGBlue}{版本记录}} & \textbf{12} \\
+\end{longtable}
+\clearpage
+\mainmatter
+
+\chapter{概述}
+
+\section{软件定位}
+FlameGuardWeb 是面向预热炉现场的 Web 监视界面。它用于在浏览器中集中显示炉内温度、烟气资源、控制器建议、执行状态和垃圾组分比例，帮助现场人员快速判断系统是否处于稳定运行状态。
+
+\notebox{核心用途}{本软件的主要用途是“看得见、看得懂、能校正”：看炉温和趋势，看垃圾组分和含水率变化，看控制器建议与实际执行状态，并在需要时提交人工组分校正。}
+
+FlameGuardWeb 当前版本默认运行实时仿真监视模式。它适合用于算法演示、工艺讨论、操作培训和现场界面预演；在接入真实设备前，应由工程人员完成现场数据源、权限和安全联锁配置。
+
+\section{适用人员}
+\begin{itemize}
+  \item 现场值班人员：观察炉温、趋势、状态灯和异常提示。
+  \item 调试人员：检查组分输入、刷新频率、Docker 部署和运行日志。
+  \item 项目演示人员：通过大屏或局域网页面展示预热炉监视效果。
+  \item 工程开发人员：在最后一章基础上理解 Web 层与仿真层的连接方式。
+\end{itemize}
+
+\section{页面总览}
+FlameGuardWeb 保持三栏大屏布局。左侧负责物料与人工校正，中间负责三维模型和实时趋势，右侧负责组分比例与控制状态。
+
+\begin{longtable}{p{0.23\linewidth}p{0.67\linewidth}}
+\toprule
+\textbf{页面区域} & \textbf{主要内容} \\
+\midrule
+左侧面板 & 数据来源、六类垃圾组分、入口湿垃圾流量、组分可信度、提交组分、启动、暂停、复位和状态监控。 \\
+中间面板 & 模型三维视图预览和炉温、烟囱温度、目标温度、控制指令等实时趋势。 \\
+右侧面板 & 垃圾组分比例、控制器建议、执行状态、出口物料温度、出口含水率、烟气资源诊断。 \\
+\bottomrule
+\end{longtable}
+
+\warnbox{安全边界}{FlameGuardWeb 是监视与展示界面，不替代现场 PLC、安全联锁、紧急停机和人工安全规程。真实现场部署时，执行器控制权限应由工程安全系统统一管理。}
+
+\chapter{快速启动}
+
+\section{推荐启动方式}
+推荐使用 Docker Compose 启动。该方式对使用者最简单，不需要手动安装 Python、依赖包或运行环境。
+
+\begin{lstlisting}[language=bash]
+cd FlameGuardWeb
+cp .env.example .env
+docker compose up --build -d
+\end{lstlisting}
+
+启动完成后，在浏览器中打开：
+
+\begin{lstlisting}[language=bash]
+http://127.0.0.1:5000
+\end{lstlisting}
+
+如果部署在现场局域网服务器或工控机上，其他电脑可以访问：
+
+\begin{lstlisting}[language=bash]
+http://服务器IP:5000
+\end{lstlisting}
+
+\section{常用命令}
+\begin{longtable}{p{0.32\linewidth}p{0.58\linewidth}}
+\toprule
+\textbf{操作} & \textbf{命令} \\
+\midrule
+启动或更新服务 & \pathcode{docker compose up --build -d} \\
+查看运行日志 & \pathcode{docker compose logs -f flameguardweb} \\
+停止服务 & \pathcode{docker compose down} \\
+检查健康状态 & 浏览器访问 \pathcode{/healthz} \\
+打开本机页面 & \pathcode{http://127.0.0.1:5000} \\
+\bottomrule
+\end{longtable}
+
+\notebox{首次启动}{首次启动需要构建镜像，耗时会比后续启动更长。看到容器进入 running 状态后，再刷新浏览器页面。}
+
+\section{基础配置}
+在 \pathcode{.env} 文件中可以调整常用运行参数。
+
+\begin{longtable}{p{0.36\linewidth}p{0.2\linewidth}p{0.34\linewidth}}
+\toprule
+\textbf{配置项} & \textbf{示例值} & \textbf{说明} \\
+\midrule
+\pathcode{FLAMEGUARD_PORT} & \pathcode{5000} & Web 服务端口。 \\
+\pathcode{FLAMEGUARD_REFRESH_MS} & \pathcode{250} & 前端刷新间隔，单位 ms。数值越小刷新越快。 \\
+\pathcode{FLAMEGUARD_HISTORY_LIMIT} & \pathcode{1800} & 后端保留的历史点数。 \\
+\pathcode{TZ} & \pathcode{Asia/Shanghai} & 容器时区。 \\
+\bottomrule
+\end{longtable}
+
+\chapter{页面功能说明}
+
+\section{左侧：物料监测与人工校正}
+左侧面板用于输入或校正当前垃圾组分。默认包含六类组分：菜叶、西瓜皮、橙子皮、肉、杂项混合、米饭。六项数值之和必须等于 1。
+
+\notebox{左侧区域阅读提示}{左侧输入区用于提交或校正垃圾组分；状态监控区用于快速确认系统是否运行、炉温是否偏离目标、安全裕度是否充足以及数据是否处于刷新状态。}
+
+\subsection{提交组分}
+当组分识别结果需要人工修正时，先修改对应输入框，再点击“提交组分 / 刷新监控”。系统会将新的组分作为后续监视计算的当前物料信息。
+
+\warnbox{输入检查}{如果六类组分之和不等于 1，页面会提示错误。建议先按比例归一化，再提交。}
+
+\section{中间：模型和实时趋势}
+中间上方显示炉体模型视图，下方显示关键量实时趋势。趋势图主要用于观察系统是否正在向目标温度附近稳定，以及控制指令是否出现异常波动。
+
+\notebox{趋势图阅读提示}{趋势图重点观察炉温曲线是否围绕目标温度附近波动，烟囱温度和热风指令是否出现明显跳变。如果炉温偏差持续扩大，应结合右侧控制状态和现场工况进一步检查。}
+
+\section{右侧：组分比例和控制状态}
+右侧上方显示当前垃圾组分比例；右侧下方显示控制器建议和执行状态。现场人员重点观察以下信息：
+
+\begin{itemize}
+  \item \fgbadge{Tg\_ref / Tg\_cmd}：建议热风温度与实际执行热风温度。
+  \item \fgbadge{vg\_ref / vg\_cmd}：建议气流速度与实际执行气流速度。
+  \item \fgbadge{omega\_out}：预热炉出口含水率。
+  \item \fgbadge{Q\_aux}：辅助补热功率，长期升高时需要关注热量资源。
+  \item \fgbadge{NMPC 求解状态}：显示控制器当前是否正常给出建议。
+\end{itemize}
+
+\begin{longtable}{p{0.32\linewidth}p{0.58\linewidth}}
+\toprule
+\textbf{状态项} & \textbf{建议解读} \\
+\midrule
+系统状态显示“NMPC运行” & 控制器正常给出建议，监视数据正在刷新。 \\
+炉温偏差接近 0 & 当前炉温接近目标值，控制效果较稳定。 \\
+安全裕度较大 & 当前温度距离安全边界较远，状态较安全。 \\
+数据状态显示“暂停” & 监视已暂停或数据未继续推进，需要点击启动或检查服务。 \\
+NMPC 状态耗时明显变大 & 计算压力较高，可适当增大刷新间隔或检查服务器负载。 \\
+\bottomrule
+\end{longtable}
+
+\chapter{日常使用流程}
+
+\section{启动前检查}
+打开页面前，建议先完成以下检查：
+\begin{enumerate}
+  \item 确认 Docker 服务已启动，FlameGuardWeb 容器处于运行状态。
+  \item 确认浏览器能打开 \pathcode{http://127.0.0.1:5000} 或现场服务器地址。
+  \item 确认页面顶部标题、左侧输入区、中间趋势区、右侧状态区均正常显示。
+  \item 如用于大屏展示，可点击右上角“全屏模式”。
+\end{enumerate}
+
+\section{常规监视步骤}
+\begin{enumerate}
+  \item 打开 Web 页面，等待状态监控区进入“NMPC运行”或类似正常状态。
+  \item 观察中间实时趋势，确认炉温曲线没有持续偏离目标值。
+  \item 观察右侧控制器建议，确认温度、流速、含水率等数值没有异常跳变。
+  \item 根据现场组分识别或人工判断，必要时在左侧修正垃圾组分。
+  \item 点击“提交组分 / 刷新监控”，等待提示完成。
+  \item 如需暂停显示，点击“暂停”；恢复时点击“启动”；需要重新开始仿真或演示时点击“复位”。
+\end{enumerate}
+
+\begin{longtable}{p{0.18\linewidth}p{0.72\linewidth}}
+\toprule
+\textbf{步骤} & \textbf{操作说明} \\
+\midrule
+1 & 打开页面，确认服务在线。 \\
+2 & 观察实时趋势和右侧控制状态。 \\
+3 & 如组分需要校正，修改左侧六类组分。 \\
+4 & 点击“提交组分 / 刷新监控”。 \\
+5 & 继续观察炉温偏差、安全裕度和数据状态。 \\
+\bottomrule
+\end{longtable}
+
+\section{大屏和滚动}
+页面默认保持大屏三栏框架。如果屏幕高度较小，页面可以向下滚动查看底部内容。若需要完整展示，建议使用 1920\(\times\)1080 或更高分辨率，并开启浏览器全屏。
+
+\chapter{常见问题与处理}
+
+\section{页面打不开}
+\begin{longtable}{p{0.35\linewidth}p{0.55\linewidth}}
+\toprule
+\textbf{可能原因} & \textbf{处理方式} \\
+\midrule
+容器未启动 & 执行 \pathcode{docker compose up --build -d}。 \\
+端口被占用 & 修改 \pathcode{.env} 中的 \pathcode{FLAMEGUARD_PORT}，然后重启。 \\
+局域网访问失败 & 检查服务器 IP、端口映射和防火墙。 \\
+浏览器缓存异常 & 刷新页面或清理缓存后重试。 \\
+\bottomrule
+\end{longtable}
+
+\section{页面数据不刷新}
+先看左侧“数据状态”。如果显示暂停，点击“启动”。如果仍不刷新，查看 Docker 日志：
+
+\begin{lstlisting}[language=bash]
+docker compose logs -f flameguardweb
+\end{lstlisting}
+
+也可以访问 \pathcode{/healthz} 检查服务是否在线。
+
+\section{底部内容看不到}
+当前版本已经支持纵向滚动。若仍看不到底部内容，可以：
+\begin{itemize}
+  \item 缩小浏览器缩放比例，例如 90\% 或 80\%。
+  \item 使用浏览器全屏模式。
+  \item 检查是否使用了旧版本静态文件，必要时清理浏览器缓存。
+\end{itemize}
+
+\section{组分提交失败}
+最常见原因是六类组分之和不等于 1。建议按如下方式检查：
+\begin{enumerate}
+  \item 六个输入框均为数字。
+  \item 没有空值或负值。
+  \item 六项相加等于 1，例如 \(0.20+0.20+0.10+0.20+0.20+0.10=1.00\)。
+\end{enumerate}
+
+\section{状态出现黄色或红色}
+黄色通常表示需要关注，红色表示可能存在异常。现场处理优先级建议如下：
+\begin{enumerate}
+  \item 先确认是否为仿真演示中的随机扰动。
+  \item 查看炉温偏差和安全裕度是否持续恶化。
+  \item 如果接入真实设备，应遵循现场联锁和安全规程，不应仅根据 Web 页面直接操作执行器。
+  \item 保存日志并通知调试或工艺人员。
+\end{enumerate}
+
+\chapter{技术实现简述}
+
+\section{总体结构}
+本章只说明必要的技术背景，便于调试和二次开发。FlameGuardWeb 的结构可以理解为四层：浏览器页面、Web API、实时仿真/控制适配层、历史数据缓存。
+
+\begin{longtable}{p{0.26\linewidth}p{0.64\linewidth}}
+\toprule
+\textbf{层级} & \textbf{作用} \\
+\midrule
+浏览器页面 & 展示大屏界面，并周期性请求 dashboard 数据。 \\
+Flask Web API & 提供页面、健康检查和监控数据接口。 \\
+实时仿真 / NMPC 适配层 & 推进仿真状态，整理控制建议和执行状态。 \\
+telemetry 缓存 & 保存最近一段时间的趋势数据，供前端绘图。 \\
+\bottomrule
+\end{longtable}
+
+\section{主要接口}
+\begin{longtable}{p{0.32\linewidth}p{0.58\linewidth}}
+\toprule
+\textbf{接口} & \textbf{用途} \\
+\midrule
+\pathcode{GET /} & 返回 Web 主页面。 \\
+\pathcode{GET /api/dashboard} & 获取当前状态和历史趋势，前端按刷新间隔自动调用。 \\
+\pathcode{POST /api/feedstock} & 提交人工组分校正和物料流量信息。 \\
+\pathcode{POST /api/start} & 启动或继续实时监视。 \\
+\pathcode{POST /api/stop} & 暂停实时监视。 \\
+\pathcode{POST /api/reset} & 复位仿真和历史状态。 \\
+\pathcode{GET /healthz} & 健康检查，用于部署和运维。 \\
+\bottomrule
+\end{longtable}
+
+\section{实时仿真和随机扰动}
+当前用户版默认使用实时推进式仿真。前端每隔一段时间请求一次 \pathcode{/api/dashboard}，后端在请求到来时推进状态并返回最新数据。为了更接近现场观察效果，仿真中加入了合理的随机扰动，例如炉温慢漂移、烟囱温度波动、气流速度扰动和偶发进料冲击。
+
+\section{后续接入现场数据}
+当需要接入真实现场时，建议保持浏览器页面和 \pathcode{/api/dashboard} 数据格式不变，只替换后端数据源。这样可以最大限度保留当前页面框架和操作习惯。
+
+\warnbox{工程建议}{真实现场部署前，应由工程人员完成传感器数据源、执行器权限、安全联锁、用户权限和日志审计配置。FlameGuardWeb 本身不应绕过现场安全系统直接控制设备。}
+
+
+\end{document}
