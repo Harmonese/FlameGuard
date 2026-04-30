@@ -1200,6 +1200,26 @@ def plot_history(hist: History, out_png: str | Path, title: str, *, event_window
     plt.close(fig)
 
 
+def _write_csv(path: Path, rows: Sequence[dict]) -> None:
+    """Write a sequence of dictionary rows to CSV."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows_list = list(rows)
+    if not rows_list:
+        path.write_text("", encoding="utf-8")
+        return
+
+    fieldnames: list[str] = []
+    for row in rows_list:
+        for key in row.keys():
+            if key not in fieldnames:
+                fieldnames.append(key)
+
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows_list)
+
+
 def _case_output_dir(cfg: SimConfig) -> Path:
     return Path(cfg.out_dir) / cfg.case_name
 

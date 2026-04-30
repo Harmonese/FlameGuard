@@ -1,0 +1,2945 @@
+\documentclass[UTF8,openany,zihao=-4,oneside]{ctexbook}
+
+% Page and typography
+\usepackage[a4paper,top=23mm,bottom=24mm,left=24mm,right=24mm,headheight=15pt,headsep=8mm,footskip=12mm]{geometry}
+\linespread{1.08}
+\raggedbottom
+\sloppy
+\emergencystretch=3em
+
+% Core packages
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs,longtable,array,tabularx,multirow,makecell}
+\usepackage{enumitem}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{titletoc}
+\usepackage{tocloft}
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{etoolbox}
+\usepackage{hyperref}
+\usepackage{bookmark}
+
+% Brand colors
+\definecolor{FGBlue}{HTML}{1F4E79}
+\definecolor{FGDeep}{HTML}{102A43}
+\definecolor{FGCyan}{HTML}{2E8BC0}
+\definecolor{FGOrange}{HTML}{D98A15}
+\definecolor{FGGray}{HTML}{F3F6F9}
+\definecolor{FGLine}{HTML}{D7E2EA}
+\definecolor{FGText}{HTML}{243B53}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=FGBlue,
+  urlcolor=FGCyan,
+  citecolor=FGOrange,
+  pdfauthor={FlameGuard},
+  pdftitle={稳燃宝预热炉设计手册},
+  pdfsubject={垃圾预热炉工程设计、数学建模与控制接口},
+  pdfkeywords={FlameGuard, 预热炉, 垃圾焚烧, 模型预测控制, 技术手册}
+}
+
+% Paragraph and list tuning
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.18em}
+\setlist{itemsep=0.15em,topsep=0.35em,leftmargin=2.2em}
+\renewcommand{\arraystretch}{1.22}
+\setlength{\tabcolsep}{5pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\AtBeginEnvironment{longtable}{\small\renewcommand{\arraystretch}{1.2}}
+
+% Pandoc compatibility
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\providecommand{\passthrough}[1]{#1}
+\newcommand{\manualdivider}{\par\vspace{0.6em}\noindent\textcolor{FGLine}{\rule{\linewidth}{0.7pt}}\vspace{0.6em}\par}
+
+% Captions
+\captionsetup{font=small,labelfont={bf,color=FGBlue},labelsep=quad}
+
+% Chapter / section styles
+\titleformat{\chapter}[display]
+  {\Huge\bfseries\sffamily\color{FGDeep}}
+  {\begin{tikzpicture}[baseline=(n.base)]\node[fill=FGBlue,text=white,rounded corners=1.5mm,inner xsep=8pt,inner ysep=5pt,font=\Large\bfseries\sffamily] (n) {第\thechapter 章};\end{tikzpicture}}
+  {0.85em}
+  {\Huge}
+  [\vspace{0.35em}{\color{FGOrange}\titlerule[1.2pt]}]
+\titlespacing*{\chapter}{0pt}{-4mm}{11mm}
+
+\titleformat{\section}
+  {\Large\bfseries\sffamily\color{FGBlue}}
+  {\thesection}{0.75em}{}
+  [\vspace{0.15em}{\color{FGLine}\titlerule[0.6pt]}]
+\titlespacing*{\section}{0pt}{2.1ex plus .4ex}{1.1ex}
+
+\titleformat{\subsection}
+  {\large\bfseries\sffamily\color{FGDeep}}
+  {\thesubsection}{0.75em}{}
+\titlespacing*{\subsection}{0pt}{1.8ex plus .3ex}{0.8ex}
+
+\titleformat{\subsubsection}
+  {\normalsize\bfseries\sffamily\color{FGDeep}}
+  {\thesubsubsection}{0.65em}{}
+\titlespacing*{\subsubsection}{0pt}{1.3ex plus .2ex}{0.55ex}
+
+% TOC styling
+\renewcommand{\cftchapfont}{\sffamily\bfseries\color{FGDeep}}
+\renewcommand{\cftsecfont}{\sffamily\color{FGText}}
+\renewcommand{\cftchappagefont}{\sffamily\bfseries\color{FGBlue}}
+\renewcommand{\cftsecpagefont}{\sffamily\color{FGText}}
+\setlength{\cftbeforechapskip}{0.45em}
+
+% Header / footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\sffamily\small\color{FGDeep}“稳燃宝”预热炉设计手册}
+\fancyhead[R]{\sffamily\small\color{FGBlue}\leftmark}
+\fancyfoot[L]{\sffamily\scriptsize\color{FGText}工程设计 · 数学建模 · 控制接口}
+\fancyfoot[R]{\sffamily\small\bfseries\color{FGBlue}\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{FGLine}\leaders\hrule height \headrulewidth\hfill}}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[R]{\sffamily\small\bfseries\color{FGBlue}\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+}
+
+% Code listings
+\lstdefinestyle{fgcode}{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{FGGray},
+  frame=single,
+  rulecolor=\color{FGLine},
+  framerule=0.5pt,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  tabsize=2,
+  xleftmargin=1em,
+  xrightmargin=1em,
+  framexleftmargin=0.6em,
+  framexrightmargin=0.6em,
+  aboveskip=0.8em,
+  belowskip=0.8em
+}
+\lstset{style=fgcode}
+
+% Inline code and quotes
+\newcommand{\fgbadge}[1]{\tcbox[colback=FGBlue!6,colframe=FGBlue!35,boxrule=0.4pt,arc=1mm,left=2pt,right=2pt,top=1pt,bottom=1pt,on line]{\sffamily\footnotesize #1}}
+
+\begin{document}
+
+% Cover
+\begin{titlepage}
+\begin{tikzpicture}[remember picture,overlay]
+  \fill[FGDeep] (current page.north west) rectangle ([yshift=-88mm]current page.north east);
+  \fill[FGBlue] ([yshift=-88mm]current page.north west) rectangle ([yshift=-92mm]current page.north east);
+  \fill[FGOrange] ([yshift=-92mm]current page.north west) rectangle ([yshift=-94mm]current page.north east);
+  \fill[FGGray] ([yshift=-94mm]current page.north west) rectangle (current page.south east);
+  \draw[FGBlue!20,line width=1.2pt] ([xshift=18mm,yshift=-122mm]current page.north west) -- ([xshift=-18mm,yshift=-122mm]current page.north east);
+\end{tikzpicture}
+\vspace*{13mm}
+{\sffamily\bfseries\color{white}\fontsize{18}{22}\selectfont FlameGuard / 稳燃宝}\par
+\vspace{9mm}
+{\sffamily\bfseries\color{white}\fontsize{34}{42}\selectfont 预热炉设计手册}\par
+\vspace{4mm}
+{\sffamily\color{white}\fontsize{15}{20}\selectfont 工程设计 · 热工建模 · 低阶代理 · 控制接口}\par
+\vspace{36mm}
+\begin{tcolorbox}[enhanced,width=\textwidth,colback=white,colframe=FGLine,boxrule=0.7pt,arc=2mm,drop shadow={black!12!white},left=8mm,right=8mm,top=6mm,bottom=6mm]
+{\sffamily\bfseries\Large\color{FGDeep}v0.2.0 Beta}\par\vspace{0.6em}
+\end{tcolorbox}
+\vfill
+{\sffamily\small\color{FGText}炉火纯青队 · 大学生节能减排社会实践与科技竞赛 · 2025}\par
+\end{titlepage}
+
+\frontmatter
+\pagestyle{plain}
+\tableofcontents
+\cleardoublepage
+\pagestyle{fancy}
+\mainmatter
+
+% ---- Body generated from Markdown by Pandoc ----
+\chapter{概述}\label{ux6982ux8ff0}
+
+\section{系统简要说明}\label{ux6587ux6863ux76eeux7684}
+
+本手册用于说明``稳燃宝''（FlameGuard）系统中垃圾预热炉的工程设计、工作原理、关键结构、材料选择、传感器配置数学物理建模，并提供了简要的设计图纸与作为参考的 Python 低阶代理实现。``稳燃宝''（FlameGuard）面向小型垃圾焚烧厂或乡镇级生活垃圾处理场景。
+
+完整的``稳燃宝''系统由垃圾焚烧炉、垃圾预热炉和模型预测控制器三类主要对象构成。其中，垃圾焚烧炉是系统中的主燃烧单元，垃圾预热炉是焚烧炉前端的预处理与热量回收单元。模型预测控制器是连接焚烧炉状态、预热炉执行动作和垃圾进料扰动的控制决策单元。``稳燃宝''的设计涵盖其中的垃圾预热炉和模型预测控制器部分，各地小型垃圾焚烧厂的垃圾焚烧炉作为被接入对象。本项目的设计重点是：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  设计一套适合高含水率垃圾预处理的预热脱水炉；
+\item
+  建立预热炉与焚烧炉之间的热工和动态关联；
+\item
+  设计控制器，使预热炉根据焚烧炉状态和入口垃圾性质动态调整工况；
+\item
+  提供一套对于各地具体系统进行测试、校核和调参的方法。
+\end{enumerate}
+
+因此，本手册中的``设计对象''主要是预热炉及其控制接口。焚烧炉在本手册中主要作为预热炉的上游热源与下游燃烧反馈对象出现，控制器在本手册中主要作为预热炉运行工况的决策系统出现。
+
+``稳燃宝''系统的基本工艺链条如图 1.1 所示。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=7mm and 8mm,
+  process/.style={draw=FGBlue, fill=FGBlue!6, very thick, rounded corners=2mm, minimum height=12mm, minimum width=28mm, align=center, font=\sffamily\small},
+  controller/.style={draw=FGOrange, fill=FGOrange!8, very thick, rounded corners=2mm, minimum height=12mm, minimum width=32mm, align=center, font=\sffamily\small},
+  arrow/.style={-{Latex[length=2.8mm,width=2mm]}, very thick, FGBlue!80},
+  feedback/.style={-{Latex[length=2.8mm,width=2mm]}, very thick, FGOrange!85, dashed}
+]
+\node[process] (feed) {入口垃圾\\组分/含水率};
+\node[process, right=of feed] (pre) {垃圾预热炉\\升温与脱水};
+\node[process, right=of pre] (furnace) {主焚烧炉\\稳定燃烧};
+\node[process, right=of furnace] (stack) {烟气/烟囱\\资源反馈};
+\node[controller, below=16mm of pre] (mpc) {模型预测控制器\\$T_g$, $v_g$ 决策};
+\draw[arrow] (feed) -- (pre);
+\draw[arrow] (pre) -- node[above, font=\scriptsize\sffamily] {$\omega, T$} (furnace);
+\draw[arrow] (furnace) -- node[above, font=\scriptsize\sffamily] {$T, v$} (stack);
+\draw[feedback] (furnace.south) |- node[pos=0.24, right, font=\scriptsize\sffamily] {$T_{avg}$} (mpc.east);
+\draw[feedback] (stack.south) |- (mpc.east);
+\draw[feedback] (mpc.north) -- node[right, font=\scriptsize\sffamily] {预热强度命令} (pre.south);
+\end{tikzpicture}
+\caption{“稳燃宝”系统的基本工艺链条}
+\label{fig:process-chain}
+\end{figure}
+
+其中，预热炉处于垃圾进入主焚烧炉之前，其作用为提前改变垃圾进入焚烧炉时的热状态和水分状态。对于高含水率厨余垃圾或混合生活垃圾，水分含量过高会导致焚烧炉燃烧区温度下降。水分蒸发需要消耗大量潜热。如果这部分蒸发过程主要发生在主焚烧炉内部，炉膛温度会被明显拉低。炉温降低会进一步影响燃烧稳定性、烟气流速、污染物生成与辅助燃料需求。因此，预热炉的核心价值在于利用焚烧炉已经产生的高温烟气余热，在垃圾进入主焚烧炉之前完成一部分显热升温并蒸发大部分水分，以提高主焚烧炉平均温度的稳定性，减少辅助燃料或额外补热需求。
+
+预热炉的控制输入为：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  预热炉换热侧烟气入口温度 \(T_g\)；
+\item
+  预热炉换热侧循环速度 \(v_g\)。
+\end{enumerate}
+
+其中，\(T_g\) 表示进入预热炉换热回路的高温烟气或补热后烟气的等效入口温度。\(v_g\) 表示预热炉换热侧等效流通截面上的平均循环速度。在真实设备中，\(v_g\) 由风机转速、阀门开度、循环烟气流量或其他质量流量控制器所决定。在本手册提供的 Python 代理模型中，将 \(v_g\) 简化为换热侧等效流速。预热炉的主要输出为：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  出口垃圾湿基含水率 \(\omega_{out}\)；
+\item
+  出口垃圾等效固体温度 \(T_{solid,out}\)；
+\item
+  烟气沿程温度变化；
+\item
+  预热炉内部库存状态；
+\item
+  补热需求与辅助循环需求的诊断量。
+\end{enumerate}
+
+其中，\(\omega_{out}\) 是控制器间接影响焚烧炉稳定性的关键变量。\(\omega_{out}\) 越低，进入主焚烧炉的垃圾越干。在其他条件相同的情况下，进入主焚烧炉的垃圾越干，主焚烧炉平均温度越高，反之亦然。因此，预热炉是``稳燃宝''系统中的慢速调节器，其通过改变未来进入焚烧炉的垃圾状态来影响焚烧炉。
+
+焚烧炉向预热炉提供热资源。预热炉向焚烧炉提供更适宜燃烧的垃圾。控制器根据焚烧炉反馈决定预热炉应当更强脱水，还是降低能耗。在正常运行中，如果焚烧炉平均温度低于目标或接近安全下限，控制器会倾向于提高 \(T_g\) 和 \(v_g\)。这样预热炉会更强地升温和脱水，使未来进入焚烧炉的垃圾更干。在焚烧炉温度处于参考区间内时，控制器会在稳定燃烧和能耗之间折中。在焚烧炉温度偏高时，控制器会降低预热强度，避免过度干燥和过高炉温。系统中的焚烧炉并不只是热源。它同时也是反馈对象。控制器会使用焚烧炉平均温度 \(T_{avg}\)、烟囱温度 \(T_{stack}\) 和烟囱速度 \(v_{stack}\) 来估计燃烧状态。烟囱温度和烟囱速度还用于估计可用烟气资源。如果自然烟气资源不足，系统可以记录辅助补热需求和辅助循环需求。在当前设计中，辅助补热上限允许达到 \(1100^\circ\mathrm{C}\) 的等效烟气入口温度。这一设置反映了真实垃圾焚烧烟气温度可能较高，也为强扰动恢复提供足够控制余量。预热炉不要求垃圾与烟气直接接触。烟气作为热源在导烟管和夹套中流动。垃圾在回转筒内部运动。热量通过金属换热壁面传递。这种间接换热设计避免烟气中的灰尘、腐蚀性组分和污染物直接与垃圾物料混合。
+
+同时，它也使预热炉出口垃圾仍可作为进入焚烧炉的连续物料流处理。当前系统设计采用回转筒式预热脱水炉。该炉型适合连续进料、连续出料、高含水率物料缓慢推进和轴向混合。炉体沿轴向布置，垃圾在筒内随回转、抄板或内部结构缓慢翻动和推进。烟气则通过内置导烟管和外夹套形成换热通道。
+
+\manualdivider
+
+\section{单位约定}\label{ux5355ux4f4dux7ea6ux5b9a}
+
+除非特别说明，所有物理量均采取国际标准单位。
+
+湿基含水率在数学公式中优先使用小数形式 \(\omega\)。湿基含水率百分数形式记为 \(w\)。二者关系为：
+
+\[
+w=100\omega
+\]
+
+例如：
+
+\[
+\omega=0.20
+\]
+
+表示湿基含水率为：
+
+\[
+w=20\%
+\]
+
+焚烧炉稳态代理模型中的部分回归公式使用百分数形式 \(w\)。预热炉热工、蒸发和库存计算使用湿基小数形式 \(\omega\)。
+
+温度变量约定如下：
+
+\begin{longtable}[c]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.2576}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4394}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3030}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+符号
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+含义
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+默认单位
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\(T_g\) & 预热炉换热侧烟气入口温度 & \(^\circ\mathrm{C}\) \\
+\(T_{g,cmd}\) & 实际发往 plant 的烟气温度命令 & \(^\circ\mathrm{C}\) \\
+\(T_{g,ref}\) & 控制器输出的烟气温度参考 & \(^\circ\mathrm{C}\) \\
+\(T_s\) & 槽位垃圾等效固体温度 & \(^\circ\mathrm{C}\) \\
+\(T_{solid,out}\) & 预热炉出口垃圾等效温度 & \(^\circ\mathrm{C}\) \\
+\(T_{avg}\) & 焚烧炉燃烧核心区域平均温度 & \(^\circ\mathrm{C}\) \\
+\(T_{stack}\) & 焚烧炉烟囱出口平均温度 & \(^\circ\mathrm{C}\) \\
+\(T_{amb}\) & 环境温度 & \(^\circ\mathrm{C}\) \\
+\end{longtable}
+
+速度变量约定如下：
+
+\begin{longtable}[c]{@{}lll@{}}
+\toprule\noalign{}
+符号 & 含义 & 默认单位 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\(v_g\) & 预热炉换热侧等效循环速度 & \(\mathrm{m/s}\) \\
+\(v_{g,cmd}\) & 实际发往 plant 的循环速度命令 & \(\mathrm{m/s}\) \\
+\(v_{g,ref}\) & 控制器输出的循环速度参考 & \(\mathrm{m/s}\) \\
+\(v_{stack}\) & 焚烧炉烟囱出口平均速度 & \(\mathrm{m/s}\) \\
+\end{longtable}
+
+质量和质量流量变量约定如下：
+
+\begin{longtable}[c]{@{}lll@{}}
+\toprule\noalign{}
+符号 & 含义 & 默认单位 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\(m_d\) & 干物质量 & \(\mathrm{kg}\) \\
+\(m_w\) & 水质量 & \(\mathrm{kg}\) \\
+\(\dot m_{wet}\) & 湿垃圾质量流量 & \(\mathrm{kg/s}\) \\
+\(\dot m_d\) & 干基质量流量 & \(\mathrm{kg/s}\) \\
+\(\dot m_g\) & 烟气质量流量 & \(\mathrm{kg/s}\) \\
+\(\dot m_{stack}\) & 自然烟囱可用烟气质量流量 & \(\mathrm{kg/s}\) \\
+\(\dot m_{aux}\) & 辅助循环或补偿流量需求 & \(\mathrm{kg/s}\) \\
+\end{longtable}
+
+几何变量约定如下：
+
+\begin{longtable}[c]{@{}lll@{}}
+\toprule\noalign{}
+符号 & 含义 & 默认单位 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\(L_g\) & 预热炉总炉长 & \(\mathrm{m}\) \\
+\(r_1\) & 炉体内腔半径 & \(\mathrm{m}\) \\
+\(r_2\) & 内置导烟管半径 & \(\mathrm{m}\) \\
+\(r_3\) & 外壁半径 & \(\mathrm{m}\) \\
+\(R_p\) & 六根导烟管圆心分布半径 & \(\mathrm{m}\) \\
+\(A_{flow}\) & 等效烟气流通截面积 & \(\mathrm{m^2}\) \\
+\(A_{heat}\) & 等效换热面积 & \(\mathrm{m^2}\) \\
+\end{longtable}
+
+控制器与仿真中常用时间尺度约定如下：
+
+\begin{longtable}[c]{@{}lll@{}}
+\toprule\noalign{}
+符号 & 含义 & 默认单位 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\(\Delta t\) & 通用离散时间步 & \(\mathrm{s}\) \\
+\(\Delta t_{meas}\) & plant 动态积分与测量步长 & \(\mathrm{s}\) \\
+\(\Delta t_{rollout}\) & MPC 内部 rollout 子步 & \(\mathrm{s}\) \\
+\(H\) & MPC 预测视界 & \(\mathrm{s}\) \\
+\(\tau_r\) & 预热炉平均停留时间 & \(\mathrm{s}\) \\
+\(\tau_f\) & 焚烧炉前端延迟 & \(\mathrm{s}\) \\
+\end{longtable}
+
+传热与热力学符号约定如下：
+
+\begin{longtable}[c]{@{}lll@{}}
+\toprule\noalign{}
+符号 & 含义 & 默认单位 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\(U\) & 等效总传热系数 & \(\mathrm{W/(m^2\cdot K)}\) \\
+\(Q\) & 热量 & \(\mathrm{kJ}\) \\
+\(\dot Q\) & 热功率 & \(\mathrm{kW}\) \\
+\(c_s\) & 干基垃圾比热 & \(\mathrm{kJ/(kg\cdot K)}\) \\
+\(c_w\) & 水比热 & \(\mathrm{kJ/(kg\cdot K)}\) \\
+\(c_{pg}\) & 烟气定压比热 & \(\mathrm{kJ/(kg\cdot K)}\) \\
+\(\lambda\) & 水汽化潜热 & \(\mathrm{kJ/kg}\) \\
+\(\rho_g\) & 烟气密度 & \(\mathrm{kg/m^3}\) \\
+\end{longtable}
+
+在本模型的 Python 实现中， Python 变量命名通常在物理量后附加单位后缀。例如：
+
+\begin{lstlisting}
+Tg_cmd_C
+vg_cmd_mps
+mdot_preheater_kgps
+Q_aux_heat_kW
+\end{lstlisting}
+
+若出现无单位后缀的数学符号，应以本节表格为准。若出现代码字段，应以字段后缀为准。
+
+\manualdivider
+
+\chapter{炉型设计}\label{ux7089ux578bux8bbeux8ba1}
+
+\section{炉型结构设计要求}\label{ux7089ux578bux7ed3ux6784ux8bbeux8ba1ux8981ux6c42}
+
+预热炉的结构设计需要同时满足工艺、热工、安全、控制、维护和建模等要求。
+
+\subsection{垃圾与烟气不直接接触}\label{ux5783ux573eux4e0eux70dfux6c14ux4e0dux76f4ux63a5ux63a5ux89e6}
+
+焚烧炉烟气中可能含有飞灰、酸性组分、未完全燃烧颗粒、腐蚀性气体和其他污染物。如果烟气直接穿过垃圾层，会带来若干问题，如异味外漏、水汽和挥发分反向进入烟气系统增加烟气净化负担、使设备内存在更复杂的气固混合安全风险等。因此，本设计采用间接换热方式。烟气在导烟管和外夹套中流动。垃圾在炉体内腔中运动。二者通过金属壁面换热。
+
+\subsection{垃圾与烟气反向流动}\label{ux5783ux573eux4e0eux70dfux6c14ux53cdux5411ux6d41ux52a8}
+
+垃圾与烟气整体上采取反向流动。垃圾从预热炉入口进入，沿炉体轴向逐步向出口移动。高温烟气则从靠近垃圾出口的一端进入换热回路，并向垃圾入口方向流动，逆流换热能够提高沿程平均温差利用效率。在同样的换热面积下，逆流布置通常比同向布置更适合获得较低出口含水率、并能获得较好动态响应效果。
+
+\subsection{烟气主要来自燃烧产生的余热}\label{ux70dfux6c14ux4e3bux8981ux6765ux81eaux71c3ux70e7ux4ea7ux751fux7684ux4f59ux70ed}
+
+预热炉热源优先使用焚烧炉产生的高温烟气，将烟气显热前移到垃圾入炉前，用于升温和脱水，降低主焚烧炉内部的蒸发负荷。由于烟气温度和流量会随焚烧状态变化，系统需同时记录可用烟气温度、可用烟气流量及辅助补热/辅助循环需求。为避免后续公式中不同“上限”混用，本手册将烟气温度边界分为三类。第一类是自然烟气资源上限，即由主焚烧炉当前烟囱出口温度给出的 \(T_{stack,available}\)，它随焚烧状态动态变化；第二类是辅助补热或安全恢复时允许达到的等效入口烟气温度上限，当前取
+
+\[
+T_{g,aux,max}=1100^\circ\mathrm{C}
+\]
+
+该值对应代码中资源模型和执行器恢复保护使用的辅助补热能力上限，用于表示自然烟气温度不足时系统最多允许把换热侧入口烟气等效提升到的温度。第三类是数值模型和执行器命令的宽边界，当前代码中保留
+
+\[
+T_{g,model,max}=2000^\circ\mathrm{C}
+\]
+
+它只是求解器和命令限幅的外层保护边界，不能理解为正常运行温度，也不能替代材料耐温校核。换言之，\(1100^\circ\mathrm{C}\) 是辅助补热/安全恢复语义下的工程上限，\(2000^\circ\mathrm{C}\) 是数值安全边界；真实设备仍必须结合烟气成分、材料耐温、壁面允许温度、热应力、腐蚀和安全规范进一步校核。
+
+\subsection{适应高含水率、非均质垃圾}\label{ux9002ux5e94ux9ad8ux542bux6c34ux7387ux975eux5747ux8d28ux5783ux573e}
+
+预热炉应适应高含水率、强非均质、粒径和组分变化大的生活垃圾。回转筒式结构可通过筒体旋转、抄板扰动和物料翻动降低局部堆积差异，并提供比固定床更稳定的轴向输送状态。该结构不能将垃圾完全均相化，但足以支撑低阶模型中的平均停留时间和轴向分段假设。
+
+\subsection{支持连续进料和连续出料}\label{ux652fux6301ux8fdeux7eedux8fdbux6599ux548cux8fdeux7eedux51faux6599}
+
+预热炉应支持连续进料和连续出料，以匹配主焚烧炉连续运行。设连续进料对应湿垃圾质量流量 \(\dot m_{wet}\)。根据小型垃圾焚烧厂日处理规模，设置当前基准处理规模为：
+
+\[
+20\ \mathrm{t/d}
+\]
+
+折算为连续湿垃圾质量流量：
+
+\[
+\dot m_{wet}=\frac{20000}{24\times3600}=0.2315\ \mathrm{kg/s}
+\]
+
+该数值用于估算炉内库存、平均停留时间和预热炉动态时间尺度。需要注意的是，这里的 \(\dot m_{wet}\) 指入口湿垃圾连续质量流率，而不是干基质量流率。新版代码的数据接口中对应字段为 \texttt{wet\_mass\_flow\_kgps}：若现场或测试场景显式给出该字段，则模型按实际湿质量流率推进；若未给出，则默认采用 \(20\ \mathrm{t/d}\) 换算得到的 \(0.2315\ \mathrm{kg/s}\)。后续进入焚烧炉的干基质量流率、水分质量流率和湿基含水率，均由这一湿质量流率与物料含水率共同计算得到。
+
+\subsection{具有足够停留时间}\label{ux5177ux6709ux8db3ux591fux505cux7559ux65f6ux95f4}
+
+垃圾升温和脱水需要足够停留时间，尤其是高含水率物料。平均停留时间定义为：
+
+\[
+\tau_r=\frac{M_h}{\dot m_{wet}}
+\]
+
+其中，\(M_h\) 为炉内湿垃圾平均滞留量。当前尺寸下：
+
+\[
+\tau_r\approx985\ \mathrm{s}=16.42\ \mathrm{min}
+\]
+
+该时间尺度决定了预热炉在控制系统中的慢动态特征。这里的 \(M_h\) 不是独立拟合参数，而是由炉体有效体积、工作充填率和垃圾堆积密度估算而来：
+
+\[
+M_h=\rho_b\phi A_{inner}L_g=\rho_b\phi\pi r_1^2L_g
+\]
+
+其中 \(\rho_b=450\ \mathrm{kg/m^3}\) 为当前设计采用的湿垃圾堆积密度，\(\phi=0.14\) 为工作充填率，\(r_1=0.6\ \mathrm{m}\)，\(L_g=3.2\ \mathrm{m}\)。代入后有 \(M_h\approx228.0\ \mathrm{kg}\)，再由 \(M_h/\dot m_{wet}\) 得到 \(985\ \mathrm{s}\)。因此，停留时间的来源是“几何尺寸—充填率—处理量”的组合，而不是人为指定的控制参数。
+
+\subsection{具备可调烟气工况}\label{ux5177ux5907ux53efux8c03ux70dfux6c14ux5de5ux51b5}
+
+预热炉烟气侧应至少具备两个可调变量：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  烟气入口等效温度 \(T_g\)；
+\item
+  换热侧循环速度 \(v_g\)。
+\end{enumerate}
+
+\(T_g\) 可通过烟气混合、分流、补热或旁路调节实现；\(v_g\) 可通过循环风机、阀门或烟气回路调节实现。工程执行机构可以是风机频率、阀门开度、补热器功率或烟气旁路比例，但在控制器和设计模型中统一等效为 \(T_g\) 和 \(v_g\)。其中 \(v_g\) 的含义需要特别说明：它在低阶模型中表示预热炉换热侧的等效循环速度，而不是烟囱自然一次通过速度。自然烟气速度用于计算可用资源和辅助循环需求；若自然烟气质量流量不足，代码会记录辅助循环或补风需求，而不是简单把 \(v_g\) 硬截断为烟囱速度。
+
+为避免把模型变量理解为无边界的机械变量，本设计需要同时给出控制量的工程适用区间。换热侧循环速度按
+
+\[
+3\le v_g\le12\ \mathrm{m/s}
+\]
+
+使用。这里的下界和上界并不是所有风机或所有烟道的绝对机械极限，而是经验传热系数公式 \(U(v_g)=U_0+K_Uv_g^n\) 的工程标定区间。该传热系数采用 \(U(3)=60\ \mathrm{W/(m^2\cdot K)}\) 与 \(U(12)=120\ \mathrm{W/(m^2\cdot K)}\) 两点标定，反解得到 \(U_0=18.97\)、\(K_U=20.09\)、\(n=0.65\)。因此，在没有重新试验或重新标定前，不宜把该公式外推到很低或很高的风速。入口烟气温度在正常 NMPC 控制中按
+
+\[
+100\le T_g\le T_{g,aux,max}=1100\ ^\circ\mathrm{C}
+\]
+
+理解；代码中保留的 \(T_{g,model,max}=2000\ ^\circ\mathrm{C}\) 只是执行器命令和数值求解的外层保护边界，不是本设计的长期运行温度。垃圾层等效温度 \(T_m\) 或轴向离散模型中的固体温度在当前低阶模型中还设有
+
+\[
+T_{solid,max}=250\ ^\circ\mathrm{C}
+\]
+
+用于避免把模型推进到明显超过低温预热脱水假设的热解或焦化区间。
+
+\subsection{具备补热与辅助循环能力}\label{ux5177ux5907ux8865ux70edux4e0eux8f85ux52a9ux5faaux73afux80fdux529b}
+
+当入口垃圾含水率升高时，焚烧炉温度和可用烟气温度可能同步下降，如图 2.1 所示形成正反馈恶化。若预热炉完全依赖自然烟气，会削弱脱水能力。因此系统需允许辅助补热和辅助循环。
+
+当前资源模型实际区分“自然烟气资源”和“等效可执行资源”。自然烟气资源由焚烧炉观测值给出，用于诊断当前主焚烧炉能够直接提供多少烟气热源：
+
+\[
+T_{stack,available}=\max(T_{stack}-\Delta T_{loss},\ 100)
+\]
+
+\[
+v_{stack,available}=\max(\alpha_v v_{stack},\ 0.1)
+\]
+
+\[
+\dot m_{stack,available}=\rho_g(T_{stack,available})A_s v_{stack,available}
+\]
+
+其中 \(\Delta T_{loss}\) 为烟气从烟囱测点到预热炉取热支路之间的等效温降，当前默认取 0；\(\alpha_v\) 为可抽取速度比例，当前默认取 1；\(100^\circ\mathrm{C}\) 和 \(0.1\ \mathrm{m/s}\) 是资源模型的最低诊断限值，避免异常传感器数据导致质量流量退化为负值或零值。等效可执行资源则用于给控制器提供动作上限：
+
+\[
+T_{g,cap}^{eff}=1100^\circ\mathrm{C},\qquad v_{g,cap}^{eff}=12\ \mathrm{m/s}
+\]
+
+这意味着自然烟气不足时，模型不是把预热炉直接判为不可运行，而是记录辅助补热和辅助循环需求。因此，本文将“自然烟气可提供资源”和“经补热、循环后可执行的入口工况”分开描述；前者用于资源诊断，后者用于控制器和预热炉低阶模型。
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+      node distance=7mm and 8mm,
+      process/.style={
+        draw=FGBlue,
+        fill=FGBlue!6,
+        very thick,
+        rounded corners=2mm,
+        minimum height=12mm,
+        minimum width=28mm,
+        align=center,
+        font=\sffamily\small
+      },
+      arrow/.style={
+        -{Latex[length=2.8mm,width=2mm]},
+        very thick,
+        FGBlue!80
+      },
+      feedback/.style={
+        -{Latex[length=2.8mm,width=2mm]},
+        very thick,
+        FGOrange!85,
+        dashed
+      }
+    ]
+    
+    \node[process] (n1) {垃圾变湿};
+    \node[process, right=of n1] (n2) {焚烧炉变冷};
+    \node[process, right=of n2] (n3) {可用烟气变冷};
+    \node[process, right=of n3] (n4) {预热炉脱水\\能力下降};
+    \node[process, below=16mm of n2] (n5) {入炉垃圾\\继续偏湿};
+    
+    \draw[arrow] (n1) -- (n2);
+    \draw[arrow] (n2) -- (n3);
+    \draw[arrow] (n3) -- (n4);
+    \draw[feedback] (n4.south) |- (n5.east);
+    \draw[feedback] (n5.west) -| node[pos=0.5,left,font=\scriptsize\sffamily\color{FGOrange!90}] {正反馈恶化} (n1.south);
+    
+    \end{tikzpicture}
+    \caption{高含水率垃圾导致系统热工恶化的正反馈示意图}
+    \label{fig:wet-feedback-horizontal}
+\end{figure}
+
+辅助补热用于提高进入换热侧的等效烟气温度；辅助循环用于在自然烟气一次通过流量不足时维持换热侧循环能力。因此，\(v_g\) 表示预热炉换热侧等效循环速度，不等同于烟囱一次通过速度。
+
+\subsection{具备安全边界和故障退让能力}\label{ux5177ux5907ux5b89ux5168ux8fb9ux754cux548cux6545ux969cux9000ux8ba9ux80fdux529b}
+
+预热炉涉及高温烟气、旋转设备、水汽、腐蚀性气体和粉尘，设计中应考虑以下安全边界：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  金属壁面最高允许温度；
+\item
+  外壳表面温度；
+\item
+  烟气通道压力；
+\item
+  风机、阀门和补热器故障；
+\item
+  温度传感器失效；
+\item
+  出料堵塞；
+\item
+  物料过热、焦化或局部热解；
+\item
+  回转筒机械卡滞；
+\item
+  检修隔热和防烫要求。
+\end{enumerate}
+
+控制器只负责优化工况，硬件联锁、超温保护、风机保护和紧急停机逻辑应独立设置。
+
+\subsection{便于传感器布置和状态估计}\label{ux4fbfux4e8eux4f20ux611fux5668ux5e03ux7f6eux548cux72b6ux6001ux4f30ux8ba1}
+
+预热炉内部物料状态难以完整直接测量，结构上应预留关键测点和采样口。应当可以或估计：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  入口垃圾组分或含水率；
+\item
+  入口垃圾质量流量；
+\item
+  出口垃圾温度；
+\item
+  出口垃圾含水率或近似水分指标；
+\item
+  烟气入口温度；
+\item
+  烟气出口温度；
+\item
+  烟气流量或压差；
+\item
+  炉体壁温；
+\item
+  回转速度；
+\item
+  出料连续性或堵塞状态。
+\end{enumerate}
+
+有限测量数据用于修正状态估计器。
+
+\subsection{便于清灰、检修和耐腐蚀}\label{ux4fbfux4e8eux6e05ux7070ux68c0ux4feeux548cux8010ux8150ux8680}
+
+烟气侧长期处于高温、含尘、含腐蚀性气体环境，垃圾侧存在水汽、有机酸、盐分和粘附物。因此炉型设计应考虑导烟管清灰、夹套检修、冷凝腐蚀、高温氧化、热胀冷缩、轴端密封、排液和维护安全。材料选择应优先考虑不锈钢或更高等级耐蚀耐热合金。
+
+\manualdivider
+
+\section{炉型结构设计}\label{ux7089ux578bux7ed3ux6784ux8bbeux8ba1}
+
+本节给出当前预热炉的炉型选择根据、主体结构和关键几何参数。当前炉型选择方案为带内置强化换热管束的间接回转预热脱水炉。
+
+从工艺目标看，本预热炉不追求把垃圾完全干燥成低水分燃料，而是将其作为主焚烧炉前端的热状态和水分状态调节器。其设计目标是在有限炉长、有限停留时间和有限余热资源下，尽可能稳定出口垃圾含水率和出口温度，使后续焚烧炉入口扰动变缓、变小、可预测。基于这一目标，炉型需要同时满足四个条件：第一，能够连续进料和连续出料；第二，能够适应非均质、高含水率、易粘附的生活垃圾；第三，烟气与垃圾需要隔离，以降低污染物混合和尾气处理压力；第四，在热量紧张时仍要具有较高的单位体积换热能力。带内置导烟管的间接回转筒正是在这四个条件之间取得折中的方案。
+
+为了与新版代码保持一致，本节同时给出“真实结构口径”和“低阶模型口径”。真实结构口径用于解释外夹套、导烟管、检修空间和几何布置；低阶模型口径则把外夹套与六根导烟管等效为一个换热侧烟气通道。该等效通道包含两个不同面积：\(A_{flow,eq}\) 用于计算烟气质量流量，\(A_{heat,eq}\) 用于计算换热面积。二者物理含义不同，不能互相代替。当前代码中 \(A_{flow,eq}\) 默认取主烟道截面积 \(A_D\)，而 \(A_{heat,eq}\) 默认取筒体内壁加六根导烟管外表面的总换热面积。
+
+\subsection{炉型选择依据}\label{ux7089ux578bux9009ux62e9ux4f9dux636e}
+
+常见干燥设备包括直接式回转干燥机、间接式回转干燥机、带式低温干燥机、桨叶式间接干燥机和螺旋式干燥机等。对于本系统而言，直接式回转干燥机换热和传质能力强，但会使高温烟气、垃圾水汽、臭气、粉尘和挥发分直接混合，不利于保持预热炉作为独立可控前处理单元。带式低温干燥机安全性和分区控制较好，但通常占地较大，对进料粒径、料层厚度和均匀铺料要求较高。桨叶式间接干燥机换热紧凑、接触强化能力强，适合污泥、泥饼或经过充分破碎和筛分的湿有机物料，但对于含有塑料袋、织物、长条纤维、金属和硬杂物的原生混合生活垃圾，存在缠绕、卡滞和扭矩冲击风险。
+
+因此，当前设计选择回转筒作为主体物料输送和翻动结构，用筒体旋转、抄板或导料结构适应垃圾的粒径和组分波动；同时采用间接换热方式，使烟气只在外夹套和导烟管内流动，避免烟气直接穿过垃圾物料层。由于单一外夹套的换热面积和热通量不足，进一步设置六根内置导烟管作为强化换热构件。该设计本质上是把回转筒对复杂物料的适应性与管束换热结构的高换热面积结合起来。
+
+\begin{longtable}[c]{@{}p{0.20\textwidth}p{0.28\textwidth}p{0.28\textwidth}p{0.16\textwidth}@{}}
+\toprule\noalign{}
+炉型 & 主要优点 & 主要风险 & 本项目适用性 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+直接式回转干燥炉 & 换热强，结构成熟，处理量大 & 烟气与垃圾直接接触，尾气治理、臭气和粉尘负荷高 & 不适用 \\
+外夹套间接回转筒 & 结构简单，垃圾与烟气隔离，维护相对容易 & 换热面积有限，热量紧张时脱水能力可能不足 & 作为降级方案，可兼容控制器 \\
+内置导烟管间接回转筒 & 换热面积大，保留回转筒物料适应性，适合余热利用 & 挂料、缠绕、清理、腐蚀和检修要求高 & 当前主方案 \\
+带式低温干燥机 & 低温安全，分区控制好，适合余热 & 占地大，对铺料和预处理要求高 & 为替代方案，可兼容控制器 \\
+桨叶式间接干燥机 & 接触换热强，结构紧凑，适合湿黏物料 & 对硬杂物、长条物和金属敏感，扭矩保护要求高 & 不适用 \\
+\end{longtable}
+
+\subsection{导烟管方案注意事项}\label{ux5bfcux70dfux7ba1ux65b9ux6848ux7684ux5de5ux7a0bux8fb9ux754c}
+
+内置导烟管提高了换热能力，但也使炉内结构复杂化。对于生活垃圾这种高含水率、强非均质、可能含有塑料袋、织物、绳带、金属和硬杂物的物料，导烟管外表面可能成为挂料、缠绕、粘附和磨损位置。
+
+工程中应遵守以下注意事项：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  进入预热炉的垃圾应经过破袋、粗破碎、磁选、大件筛除和长条柔性物拦截，避免长条物直接缠绕导烟管；
+\item
+  导烟管外表面应尽量光滑，避免外露螺栓、尖角支架、焊瘤和狭窄夹缝；
+\item
+  管间距和管壁至筒壁距离应大于设计最大粒径，避免湿垃圾楔入后压实、结垢或焦化；
+\item
+  导烟管应设置烟气侧压差监测、吹灰接口和检修口，垃圾侧应设置可进入或可视检查的清理窗口；
+\item
+  驱动系统应监测电机电流、扭矩或功率，当出现缠绕、挂料或出料受阻时触发降负荷或清理模式；
+\item
+  高温烟气入口温度上限属于控制器和代理模型边界，真实设备还应以金属壁温、垃圾侧气氛温度、出口 CO/VOC 和负压状态作为硬联锁条件。
+\end{enumerate}
+
+\subsection{总体结构组成}\label{ux603bux4f53ux7ed3ux6784ux7ec4ux6210}
+
+预热炉主要由以下部分构成：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  内部垃圾处理腔；
+\item
+  回转筒体；
+\item
+  六根内置导烟管；
+\item
+  外夹套烟气通道；
+\item
+  进料端密封与给料接口；
+\item
+  出料端密封与出料接口；
+\item
+  烟气入口总管；
+\item
+  烟气出口总管；
+\item
+  回转支承与驱动机构；
+\item
+  外部保温层；
+\item
+  测温、测压、测流和检修接口；
+\item
+  排水、清灰和检查结构。
+\end{enumerate}
+
+内腔承担垃圾输送、翻动和脱水；内置导烟管与外夹套共同提供换热面积。该结构相比单一外夹套具有更大的有效换热面积，并保留了回转筒内物料翻动空间。
+
+\subsection{基本几何尺寸}\label{ux57faux672cux51e0ux4f55ux5c3aux5bf8}
+
+当前预热炉主要几何参数如下。表中尺寸为当前 COMSOL 预热炉结构模型中保持不变的设计参数；后续数学模型和 Python 低阶模型均以这组尺寸作为统一几何基准。
+
+\begin{longtable}[c]{@{}lrl@{}}
+\toprule\noalign{}
+参数 & 数值 & 说明 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\(L_g\) & \(3.2\ \mathrm{m}\) & 总炉长 \\
+\(r_1\) & \(0.6\ \mathrm{m}\) & 炉体内腔半径 \\
+\(D=2r_1\) & \(1.2\ \mathrm{m}\) & 内腔直径 \\
+\(r_3\) & \(0.7\ \mathrm{m}\) & 外壁半径 \\
+\(D_{out}=2r_3\) & \(1.4\ \mathrm{m}\) & 外壁直径 \\
+\(r_3-r_1\) & \(0.1\ \mathrm{m}\) & 外夹套名义径向空间 \\
+\(\delta_{inner}\) & \(0.006\ \mathrm{m}\) & 内夹套和炉腔之间壁厚 \\
+\(\delta_{outer}\) & \(0.010\ \mathrm{m}\) & 外壁厚度 \\
+\(\delta_{tube}\) & \(0.003\ \mathrm{m}\) & 六根换热管道壁厚 \\
+\(r_2\) & \(0.084\ \mathrm{m}\) & 内置导烟管半径 \\
+\(d_t=2r_2\) & \(0.168\ \mathrm{m}\) & 导烟管外径 \\
+\(R_p\) & \(0.34\ \mathrm{m}\) & 六根导烟管圆心分布半径 \\
+\(r_d\) & \(0.4\ \mathrm{m}\) & 预热炉主烟道等效半径，用于 \(A_D=\pi r_d^2\) \\
+\(r_s\) & \(0.3\ \mathrm{m}\) & 主焚烧炉烟囱半径，用于烟气资源估算 \\
+\end{longtable}
+
+六根导烟管围绕炉体中心均匀布置，圆心坐标为：
+
+\begin{longtable}[c]{@{}lrr@{}}
+\toprule\noalign{}
+管道 & \(y\) / m & \(z\) / m \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+1 & \(0\) & \(0.34\) \\
+2 & \(0.29445\) & \(0.17\) \\
+3 & \(0.29445\) & \(-0.17\) \\
+4 & \(0\) & \(-0.34\) \\
+5 & \(-0.29445\) & \(-0.17\) \\
+6 & \(-0.29445\) & \(0.17\) \\
+\end{longtable}
+
+坐标满足：
+
+\[
+y_i=R_p\sin\theta_i,\qquad z_i=R_p\cos\theta_i
+\]
+
+\[
+\theta_i=\frac{(i-1)\pi}{3},\qquad i=1,2,\ldots,6
+\]
+
+即每隔 \(60^\circ\) 布置一根导烟管。这里的坐标原点为预热炉横截面圆心，\(y\) 与 \(z\) 为截面内两个正交方向，轴向方向由炉长 \(L_g\) 表示。该布置有利于截面热负荷对称、增加内部换热面积，并保留垃圾翻动和推进空间。
+
+为校核导烟管布置的几何可行性，可进行两个简单截面校核。首先，导烟管最外侧半径为
+
+\[
+R_p+r_2=0.34+0.084=0.424\ \mathrm{m}<r_1=0.6\ \mathrm{m}
+\]
+
+因此导烟管外缘到炉体内壁之间仍有约 \(0.176\ \mathrm{m}\) 的名义径向距离。其次，相邻两根导烟管圆心距为
+
+\[
+l_c=2R_p\sin\frac{\pi}{6}=0.34\ \mathrm{m}
+\]
+
+扣除两根导烟管外径后，相邻管外壁之间的名义净距为
+
+\[
+l_{gap}=l_c-2r_2=0.34-0.168=0.172\ \mathrm{m}
+\]
+
+该净距只用于说明当前截面布置具有基本通行空间；实际工程还需结合抄板、支撑件、最大入料粒径和挂料风险进行机械校核。
+
+\subsection{内腔、导烟管与外夹套的截面积}\label{ux5185ux8154ux5bfcux70dfux7ba1ux4e0eux5916ux5939ux5957ux7684ux622aux9762ux79ef}
+
+炉体内腔截面积为：
+
+\[
+A_{inner}=\pi r_1^2=\pi\times0.6^2=1.131\ \mathrm{m^2}
+\]
+
+单根导烟管外圆截面积为：
+
+\[
+A_{tube,outer}=\pi r_2^2=\pi\times0.084^2=0.0222\ \mathrm{m^2}
+\]
+
+六根导烟管外圆总截面积为：
+
+\[
+A_{tube,outer,total}=6\pi r_2^2=0.1330\ \mathrm{m^2}
+\]
+
+若从纯几何投影看，导烟管会占据一部分炉腔截面，因此垃圾侧可通行的名义截面积可写为：
+
+\[
+A_{waste,nom}=A_{inner}-A_{tube,outer,total}=1.131-0.1330=0.998\ \mathrm{m^2}
+\]
+
+但是需要说明，当前低阶库存模型计算 \(M_h\) 时仍采用 \(A_{inner}=\pi r_1^2\) 与工作充填率 \(\phi\) 的乘积，而没有进一步扣除导烟管投影面积。这是为了让 \(\phi\) 作为“含导烟管影响后的等效工作充填率”使用。若后续进入详细机械设计或 CFD/DEM 耦合阶段，应重新区分真实可通行截面、管束占据体积和有效充填率。
+
+导烟管内半径按 \(r_{2,in}=r_2-\delta_{tube}=0.081\ \mathrm{m}\) 估算，则单根和六根导烟管烟气流通截面积分别为：
+
+\[
+A_{tube,flow}=\pi r_{2,in}^2=0.0206\ \mathrm{m^2}
+\]
+
+\[
+A_{tube,flow,total}=6\pi r_{2,in}^2=0.1237\ \mathrm{m^2}
+\]
+
+外夹套名义环形截面积为：
+
+\[
+A_{jacket,nom}=\pi(r_3^2-r_1^2)=\pi(0.7^2-0.6^2)=0.4084\ \mathrm{m^2}
+\]
+
+从几何上看，外夹套与导烟管可构成并联烟气通路，因此名义几何流通面积可估算为：
+
+\[
+A_{flow,geom}=A_{jacket,nom}+A_{tube,flow,total}
+\]
+
+若暂按名义外夹套面积估计：
+
+\[
+A_{flow,geom}\approx0.4084+0.1237=0.5321\ \mathrm{m^2}
+\]
+
+但在当前 Python 低阶模型中，烟气侧被简化为单一等效通道，质量流量计算并不直接使用上述几何并联面积，而是采用主烟道等效面积：
+
+\[
+A_D=\pi r_d^2=\pi\times0.4^2=0.5027\ \mathrm{m^2}
+\]
+
+因此低阶模型中：
+
+\[
+A_{flow,eq}=A_D=0.5027\ \mathrm{m^2}
+\]
+
+\(A_{flow,geom}\) 主要用于结构布置和压降校核的初步理解，\(A_{flow,eq}\) 才是当前一维低阶模型中用于 \(\dot m_g=\rho_g(T_g)A_{flow,eq}v_g\) 的面积。
+
+
+\subsection{有效换热面积与等效模型口径}\label{ux6709ux6548ux6362ux70edux9762ux79efux4e0eux7b49ux6548ux6a21ux578bux53e3ux5f84}
+
+除流通截面积外，换热计算还需要有效换热面积。当前工程模型保留两个主要传热面：一是回转筒体内壁与垃圾之间的间接传热面；二是六根内置导烟管外壁与垃圾之间的间接传热面。因此有效换热面积取：
+
+\[
+A_{heat,eq}=\pi DL_g+N_t\pi d_tL_g
+\]
+
+其中 \(D=1.2\ \mathrm{m}\)，\(L_g=3.2\ \mathrm{m}\)，\(N_t=6\)，\(d_t=0.168\ \mathrm{m}\)。第一项为筒体内壁面积，第二项为六根导烟管外表面积。代入可得：
+
+\[
+\pi DL_g=\pi\times1.2\times3.2=12.06\ \mathrm{m^2}
+\]
+
+\[
+6\pi d_tL_g=6\pi\times0.168\times3.2=10.14\ \mathrm{m^2}
+\]
+
+\[
+A_{heat,eq}=22.20\ \mathrm{m^2}
+\]
+
+这一面积用于 \(U A\Delta T\) 型换热计算；它不是烟气质量流量面积，不能用于 \(\dot m_g=\rho_g A v_g\)。因此，本手册中始终区分两个面积：\(A_{flow,eq}\) 表示烟气质量流量计算中的等效流通面积，\(A_{heat,eq}\) 表示垃圾与烟气之间的等效传热面积。
+
+这样处理的原因是：真实设备中烟气可能在外夹套和导烟管之间分流，但低阶控制模型并不解析每一路通道的局部速度、局部压降和局部换热，而是把它们合并为一个可校准的一维等效通道。后续若获得详细压降或分流数据，可单独修正 \(A_{flow,eq}\)、\(A_{heat,eq}\) 或换热修正因子，而不必改变控制器接口。
+
+\manualdivider
+
+\section{工程配套系统}\label{ux5de5ux7a0bux914dux5957ux7cfbux7edf}
+
+内置导烟管回转筒的可行性不仅取决于炉体本身，还取决于其前端预处理、抽湿除臭、烟气清灰、在线清理、监测联锁和运行模式。若缺少这些配套系统，导烟管的高换热优势可能被挂料、缠绕、腐蚀、冷凝、臭气和维护困难抵消。因此，本节将预热炉视为一个完整工程单元，而不仅是一个换热筒体。
+
+\subsection{进料预处理与防缠绕系统}\label{ux8fdbux6599ux9884ux5904ux7406ux4e0eux9632ux7f20ux7ed5ux7cfbux7edf}
+
+预处理系统的目标是把原始垃圾转化为可连续输送、可翻动、较少长条缠绕物和较少硬杂物的预热炉入口物料。配套系统的前端流程为：
+
+\begin{lstlisting}
+原始垃圾
+  -> 破袋/粗破碎
+  -> 磁选与硬杂物去除
+  -> 大件筛除
+  -> 长条柔性物拦截
+  -> 均化缓冲仓
+  -> 密封连续给料
+  -> 预热炉入口
+\end{lstlisting}
+
+破袋和粗破碎用于打开袋装垃圾、打散湿团聚物，并提高物料与换热面的接触概率；磁选用于去除铁丝、铁片和其他可能磨损导烟管的金属物；大件筛除用于避免木块、砖块、玻璃瓶和大块塑料进入回转筒；长条柔性物拦截用于降低塑料膜、编织袋、绳带和布条缠绕导烟管的风险。均化缓冲仓用于降低入口含水率、组分和质量流量的短周期波动，使 MPC 预测模型能够获得更平滑的入口扰动。
+
+工程初步设计中，可暂定进入预热炉的物料粒径上限为：
+
+\[
+d_{max}=80\text{--}120\ \mathrm{mm}
+\]
+
+长条柔性物特征长度控制在：
+
+\[
+l_{fiber}\le150\text{--}200\ \mathrm{mm}
+\]
+
+\subsection{垃圾腔抽湿与臭气回焚系统}\label{ux5783ux573eux8154ux62bdux6e7fux4e0eux81edux6c14ux56deux711aux7cfbux7edf}
+
+间接换热解决了“焚烧烟气不直接接触垃圾”的问题，但垃圾受热后会释放大量水蒸气、臭气、少量挥发性有机物和细小粉尘。如果这些气体不能及时排出，垃圾腔内水蒸气分压升高会削弱干燥推动力；若局部冷凝，还可能造成返湿、腐蚀和粘附加重。因此，预热炉垃圾腔设置独立抽湿系统，并保持微负压运行。
+
+设计的抽湿与处理流程为：
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=7mm and 8mm,
+  process/.style={draw=FGBlue, fill=FGBlue!6, very thick, rounded corners=2mm, minimum height=11mm, minimum width=28mm, align=center, font=\sffamily\small},
+  control/.style={draw=FGOrange, fill=FGOrange!8, very thick, rounded corners=2mm, minimum height=11mm, minimum width=30mm, align=center, font=\sffamily\small},
+  arrow/.style={-{Latex[length=2.8mm,width=2mm]}, very thick, FGBlue!80},
+  warn/.style={-{Latex[length=2.8mm,width=2mm]}, very thick, FGOrange!85, dashed}
+]
+\node[process] (cavity) {预热炉\\垃圾腔};
+\node[process, right=of cavity] (fan) {抽湿风机\\微负压};
+\node[process, right=of fan] (mist) {除雾/除尘\\冷凝排液};
+\node[control, right=of mist] (return) {回送焚烧炉\\高温区处理};
+\node[process, below=14mm of mist] (backup) {备用除臭\\或洗涤单元};
+\draw[arrow] (cavity) -- (fan);
+\draw[arrow] (fan) -- (mist);
+\draw[arrow] (mist) -- (return);
+\draw[warn] (mist) -- node[right, font=\scriptsize\sffamily] {检修/异常工况} (backup);
+\end{tikzpicture}
+\caption{垃圾腔抽湿与臭气回焚系统示意图}
+\label{fig:moisture-odor-return}
+\end{figure}
+
+正常运行时，垃圾腔抽出的湿气和臭气优先送回主焚烧炉高温区或二燃区处理。这样可以利用焚烧炉的高温环境分解臭气和挥发性有机物，避免为预热炉单独建设复杂尾气净化系统。若主焚烧炉处于启动、停炉或异常状态，则抽湿气应切换至备用除臭、冷凝、洗涤或活性炭处理路径，避免未经处理直接排放。
+
+抽湿系统应至少监测垃圾腔压力、抽湿气温度、湿度、风量、冷凝液量和必要的 CO/VOC 指标。垃圾腔压力宜维持在微负压，以降低臭气外逸风险，但负压不宜过大，否则可能引入过量冷空气，降低预热效率并影响焚烧炉氧量平衡。
+
+\subsection{烟气侧清灰、排灰与冷凝排液系统}\label{ux70dfux6c14ux4fa7ux6e05ux7070ux6392ux7070ux4e0eux51b7ux51ddux6392ux6db2ux7cfbux7edf}
+
+焚烧炉烟气中可能含有飞灰、酸性组分和腐蚀性气体。即使烟气不直接接触垃圾，导烟管和外夹套内部也会面临积灰、低温腐蚀、高温氧化和热应力问题。因此，烟气侧设置以下结构：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  烟气入口均流箱，使六根导烟管和外夹套获得较均匀的流量分配；
+\item
+  每组导烟管入口和出口设置压差测点，用于判断积灰和堵塞趋势；
+\item
+  导烟管入口或出口预留压缩空气、蒸汽或声波吹灰接口；
+\item
+  烟气侧低点设置排灰和冷凝液排放口，避免酸性冷凝液长期滞留；
+\item
+  外夹套设置检修孔或清灰门，便于停机清理；
+\item
+  烟气出口设置温度监测，避免局部温度低于腐蚀敏感区间。
+\end{enumerate}
+
+烟气侧材料选择应同时考虑耐温、耐氯腐蚀、耐酸露点腐蚀和抗磨损要求。对于靠近烟气入口的高温段，应重点校核热应力和金属最高允许温度；对于靠近烟气出口的低温段，应重点校核冷凝腐蚀和积灰潮解风险。
+
+\subsection{导烟管外侧在线清理与检修系统}\label{ux5bfcux70dfux7ba1ux5916ux4fa7ux5728ux7ebfux6e05ux7406ux4e0eux68c0ux4feeux7cfbux7edf}
+
+导烟管外侧处于垃圾运动空间，是挂料、缠绕和粘附风险最高的位置。为使导烟管的高换热面积能够长期保持有效，应在机械结构和运行策略中加入清理措施。配套措施包括：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  筒体或导烟管支撑结构设置轻型振打装置，周期性促使湿料脱落；
+\item
+  回转驱动允许短时低速反转，用于解除轻微缠绕或堆积；
+\item
+  垃圾腔设置热空气或蒸汽清扫口，在停机或低负荷清理模式下软化并吹落粘附物；
+\item
+  炉体设置足够大的检修门和观察口，使导烟管外表面能够被人工检查和清理；
+\item
+  导烟管端部采用可检修连接，必要时能够分段拆卸或抽出更换；
+\item
+  抄板和导料结构避免与导烟管形成狭窄夹缝，减少压实和卡料区域。
+\end{enumerate}
+
+在线清理措施不应替代前端预处理。若预处理不能有效去除长条柔性物和大件硬杂物，清理系统只能降低故障频率，不能根本消除导烟管缠绕风险。
+
+\subsection{监测、诊断与联锁系统}\label{ux76d1ux6d4bux8bcaux65adux4e0eux8054ux9501ux7cfbux7edf}
+
+为了让预热炉具备可控性和可维护性，在关键风险位点设置传感器，将潜在问题转化为可测信号。推荐监测点如下：
+
+\begin{longtable}[c]{@{}p{0.16\textwidth}p{0.36\textwidth}p{0.38\textwidth}@{}}
+\toprule\noalign{}
+类别 & 推荐测点 & 主要用途 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+烟气侧 & \(T_{g,in}\)、\(T_{g,out}\)、导烟管压差、夹套压差、烟气流量 & 判断换热强度、积灰、堵塞和烟气资源是否充足 \\
+垃圾侧 & 出口垃圾温度、出口含水率或近似水分指标、垃圾腔湿度、垃圾腔压力 & 判断脱水效果、抽湿能力和臭气外逸风险 \\
+壁面与结构 & 导烟管壁温、外夹套壁温、轴端密封温度、保温层外表面温度 & 防止局部过热、焦化、热应力和人员烫伤 \\
+机械系统 & 回转速度、电机电流、驱动扭矩、轴承温度、振动信号 & 判断缠绕、卡滞、偏载和机械故障 \\
+出料系统 & 出料质量流量、出料温度、料位、堵料开关 & 判断连续出料能力和下游入炉稳定性 \\
+安全气体 & CO、VOC、O\(_2\)、可燃气体浓度 & 判断局部热解、异常氧化、泄漏和燃爆风险 \\
+\end{longtable}
+
+在控制器层面，根据具体情景构造导烟管堵塞或挂料风险指标：
+
+\[
+I_{block}=f(\Delta p_g,\ M_{motor},\ \dot m_{out},\ T_{wall},\ T_{g,in}-T_{g,out})
+\]
+
+其中，\(\Delta p_g\) 表示烟气侧压差，\(M_{motor}\) 表示回转驱动扭矩或电机负荷，\(\dot m_{out}\) 表示出料质量流量，\(T_{wall}\) 表示关键壁温。当烟气压差升高、驱动扭矩升高、出料流量下降或局部壁温异常时，系统应判断导烟管附近可能存在积灰、挂料、缠绕或堵料，并触发降负荷、反转、振打、吹扫或停机清理流程。
+
+硬件联锁不应依赖控制器 MPC 优化结果。MPC 可以给出经济性和稳定性较优的 \(T_g\) 与 \(v_g\)，但超温、超压、负压丢失、可燃气体超限、回转卡滞和出料堵塞等安全事件需要由独立联锁系统直接处理。
+
+\chapter{数学建模}\label{ux6570ux5b66ux5efaux6a21}
+
+本章描述预热炉、焚烧炉反馈和烟气资源的数学物理模型。
+
+\manualdivider
+
+\section{建模对象与边界}\label{ux5efaux6a21ux5bf9ux8c61ux4e0eux8fb9ux754c}
+
+``稳燃宝''系统中的预热炉是一个间接换热式连续预处理设备。入口为高含水率垃圾和焚烧炉烟气余热，出口为预热脱水后的垃圾和降温后的烟气。
+
+预热炉的控制输入为：
+
+\[
+u(t)=\begin{bmatrix}T_g(t)\ v_g(t)
+\end{bmatrix}
+\]
+
+其中，\(T_g(t)\) 为预热炉换热侧烟气入口等效温度，\(v_g(t)\) 为换热侧等效循环速度。
+
+预热炉的主要输出为：
+
+\[
+y_p(t)=\begin{bmatrix}
+\omega_{out}(t)\
+T_{solid,out}(t)\
+T_{g,out}(t)
+\end{bmatrix}
+\]
+
+其中，\(\omega_{out}\) 是预热后垃圾湿基含水率，\(T_{solid,out}\) 是预热后垃圾等效温度，\(T_{g,out}\) 是烟气离开预热炉后的温度。
+
+预热炉与焚烧炉之间的主要耦合关系为：
+
+\[
+[T_g,v_g]\longrightarrow \omega_{out}\longrightarrow \omega_b\longrightarrow [T_{avg},T_{stack},v_{stack}]
+\]
+
+其中，\(\omega_b\) 为进入主焚烧炉的垃圾湿基含水率。当前设计中可近似认为：
+
+\[
+\omega_b\approx\omega_{out}
+\]
+
+若后续加入预热炉出口至焚烧炉入口的输送延迟，则可写为：
+
+\[
+\omega_b(t)=\omega_{out}(t-\tau_b)
+\]
+
+本章采用以下基本假设：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  垃圾与烟气不直接接触，热量通过金属壁面间接传递；
+\item
+  垃圾沿炉体轴向由入口向出口缓慢运动；
+\item
+  烟气整体上与垃圾逆向流动；
+\item
+  垃圾侧以湿基含水率、干物质量、水质量和等效固体温度描述；
+\item
+  烟气侧以温度、速度、质量流量和定压比热描述；
+\item
+  垃圾脱水过程由显热升温、潜热蒸发和经验干燥动力学共同限制；
+\item
+  焚烧炉反馈由 COMSOL 仿真获得的静态代理回归式和低阶动态壳表示；
+\end{enumerate}
+
+\manualdivider
+
+\section{入口垃圾等效物料模型}\label{ux5165ux53e3ux5783ux573eux7b49ux6548ux7269ux6599ux6a21ux578b}
+
+入口垃圾由多种典型组分混合而成。例如实验中所获得的六类典型垃圾组分：
+
+\begin{longtable}[c]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 8\tabcolsep) * \real{0.0244}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 8\tabcolsep) * \real{0.0488}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 8\tabcolsep) * \real{0.2195}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 8\tabcolsep) * \real{0.2927}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 8\tabcolsep) * \real{0.4146}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+编号
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+类别
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+初始湿基含水率 \(\omega_i\)
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+参考干燥时间 \(t_{ref,i}\) / min
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+温度敏感性 \(s_i\) / min·\(^\circ\)C\(^{-1}\)
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+1 & 菜叶 & 0.948 & 12.1 & -0.132 \\
+2 & 西瓜皮 & 0.948 & 17.7 & -0.251 \\
+3 & 橙子皮 & 0.817 & 15.3 & -0.189 \\
+4 & 肉 & 0.442 & 11.5 & -0.216 \\
+5 & 杂项混合 & 0.773 & 16.3 & -0.210 \\
+6 & 米饭 & 0.611 & 15.8 & -0.243 \\
+\end{longtable}
+
+令入口组分比例为：
+
+\[
+x=[x_1,x_2,x_3,x_4,x_5,x_6]
+\]
+
+并满足：
+
+\[
+\sum_{i=1}^{6}x_i=1,\qquad x_i\ge0
+\]
+
+混合垃圾等效初始含水率定义为：
+
+\[
+\omega_0(x)=\sum_{i=1}^{6}x_i\omega_i
+\]
+
+即：
+
+\[
+\omega_0(x)=0.948x_1+0.948x_2+0.817x_3+0.442x_4+0.773x_5+0.611x_6
+\]
+
+混合参考干燥时间定义为：
+
+\[
+t_{ref}(x)=\sum_{i=1}^{6}x_it_{ref,i}
+\]
+
+即：
+
+\[
+t_{ref}(x)=12.1x_1+17.7x_2+15.3x_3+11.5x_4+16.3x_5+15.8x_6
+\]
+
+混合温度敏感性定义为：
+
+\[
+s(x)=\sum_{i=1}^{6}x_is_i
+\]
+
+即：
+
+\[
+s(x)=-0.132x_1-0.251x_2-0.189x_3-0.216x_4-0.210x_5-0.243x_6
+\]
+
+因此，入口垃圾可由三元等效物料性质描述：
+
+\[
+p(x)=\left[\omega_0(x),\ t_{ref}(x),\ s(x)\right]
+\]
+
+其中，\(\omega_0\) 决定初始水分负荷，\(t_{ref}\) 决定参考温度下干燥快慢，\(s\) 决定温度升高对干燥时间的影响。
+
+\manualdivider
+
+\section{处理规模、炉内库存与平均停留时间}\label{ux5904ux7406ux89c4ux6a21ux7089ux5185ux5e93ux5b58ux4e0eux5e73ux5747ux505cux7559ux65f6ux95f4}
+
+当前预热炉按小型垃圾焚烧厂连续处理规模设计。
+
+基准处理量为：
+
+\[
+20\ \mathrm{t/d}
+\]
+
+折算为连续湿垃圾质量流量：
+
+\[
+\dot m_{wet}=\frac{20000}{24\times3600}=0.2315\ \mathrm{kg/s}
+\]
+
+预热炉内腔半径为 \(r_1=0.6\ \mathrm{m}\)，炉长为 \(L_g=3.2\ \mathrm{m}\)。炉内几何体积为：
+
+\[
+V_{inner}=\pi r_1^2L_g
+\]
+
+代入数值：
+
+\[
+V_{inner}=\pi\times0.6^2\times3.2=3.619\ \mathrm{m^3}
+\]
+
+工作充填率取：
+
+\[
+\phi=0.14
+\]
+
+则垃圾占据的有效体积为：
+
+\[
+V_h=\phi V_{inner}=0.14\times3.619=0.507\ \mathrm{m^3}
+\]
+
+湿垃圾堆积密度取：
+
+\[
+\rho_b=450\ \mathrm{kg/m^3}
+\]
+
+该值用于初步设计阶段的库存估算，依据高湿生活垃圾或中低收入地区高有机质生活垃圾体积密度约 \(300\text{--}600\ \mathrm{kg/m^3}\) 的公开资料范围取中间值\footnote{体积密度取值参考高湿生活垃圾与中低收入地区高有机质生活垃圾的公开数据范围，见 Materials 期刊相关生活垃圾物性研究，\href{https://www.mdpi.com/1996-1944/18/9/2103}{Materials, 18(9), 2103}。}。因此，\(\rho_b\) 不是控制器调参量，而是设备库存和停留时间估算中的物性设计值。
+
+炉内湿垃圾平均滞留量为：
+
+\[
+M_h=\rho_bV_h=450\times0.507=228.0\ \mathrm{kg}
+\]
+
+平均停留时间为：
+
+\[
+\tau_r=\frac{M_h}{\dot m_{wet}}
+\]
+
+代入得到：
+
+\[
+\tau_r=\frac{228.0}{0.2315}=985\ \mathrm{s}=16.42\ \mathrm{min}
+\]
+
+\(\tau_r\) 是预热炉的主导慢时间尺度。它反映物料从入口进入预热炉到离开预热炉的平均时间，而不是某个控制器采样周期。
+
+\manualdivider
+
+\section{垃圾侧质量关系}\label{ux5783ux573eux4fa7ux8d28ux91cfux5173ux7cfb}
+
+湿基含水率定义为：
+
+\[
+\omega=\frac{m_w}{m_d+m_w}
+\]
+
+其中，\(m_w\) 为水质量，\(m_d\) 为干物质量。
+
+由上式可得：
+
+\[
+m_w=\frac{\omega}{1-\omega}m_d
+\]
+
+湿物料总质量为：
+
+\[
+m_{wet}=m_d+m_w=\frac{m_d}{1-\omega}
+\]
+
+连续质量流量形式为：
+
+\[
+\dot m_d=(1-\omega)\dot m_{wet}
+\]
+
+\[
+\dot m_w=\omega\dot m_{wet}
+\]
+
+在预热炉内，干物质量不因脱水过程消失。脱水只改变水质量。
+
+因此，局部水分变化应写成：
+
+\[
+\frac{d m_w}{dt}=-\dot m_{evap}
+\]
+
+\[
+\frac{d m_d}{dt}=0
+\]
+
+当垃圾由初始含水率 \(\omega_0\) 脱水到目标含水率 \(\omega\) 时，按每千克入口湿垃圾计，蒸发水量为：
+
+\[
+m_{evap}=\frac{\omega_0-\omega}{1-\omega}
+\]
+
+当 \(\omega\ge\omega_0\) 时，预热炉不加水，取：
+
+\[
+m_{evap}=0
+\]
+
+\manualdivider
+
+\section{垃圾比热与升温热负荷}\label{ux5783ux573eux6bd4ux70edux4e0eux5347ux6e29ux70edux8d1fux8377}
+
+干基垃圾比热取：
+
+\[
+c_s=1.70\ \mathrm{kJ/(kg\cdot K)}
+\]
+
+已有研究中干基生活垃圾或固体废弃物比热常落在 \(1.00\text{--}2.00\ \mathrm{J/(g\cdot K)}\) 区间，本设计取偏高的中间值以避免低估升温显热\footnote{干基固体废弃物比热范围参考环境工程领域关于生活垃圾热物性的研究，见 Journal of Environmental Management 相关论文，\href{https://www.sciencedirect.com/science/article/pii/S0301479722022241}{ScienceDirect 条目}。}。
+
+水的比热取：
+
+\[
+c_w=4.1844\ \mathrm{kJ/(kg\cdot K)}
+\]
+
+该值为 \(20^\circ\mathrm{C}\) 附近水的定压比热，采用工程热物性表中的常用取值\footnote{水的定压比热取值参考 Engineering ToolBox 的水热物性表，\href{https://www.engineeringtoolbox.com/specific-heat-capacity-water-d_660.html}{Specific Heat Capacity of Water}。}。
+
+混合垃圾等效比热按湿基含水率加权：
+
+\[
+c_{eq}=(1-\omega_0)c_s+\omega_0c_w
+\]
+
+若入口垃圾从环境温度 \(T_0\) 升温到等效干燥温度 \(T_m\)，显热需求为：
+
+\[
+q_{sens}=c_{eq}(T_m-T_0)
+\]
+
+当前设计取：
+
+\[
+T_0=20^\circ\mathrm{C}
+\]
+
+水在 \(100^\circ\mathrm{C}\) 附近的汽化潜热取：
+
+\[
+\lambda=2257.9\ \mathrm{kJ/kg}
+\]
+
+这是常用水/蒸汽热物性表中的饱和汽化潜热近似值。由于当前模型主要用于控制设计和热量等级估算，没有进一步展开压力变化、结合水和多孔介质内部迁移对潜热项的修正。
+
+单位入口湿垃圾的蒸发潜热为：
+
+\[
+q_{lat}=\lambda m_{evap}
+\]
+
+因此，将入口垃圾从 \(\omega_0\) 脱水到 \(\omega\)，并升温到 \(T_m\) 的单位质量热需求可写为：
+
+\[
+q_{req}=c_{eq}(T_m-T_0)+\lambda\frac{\omega_0-\omega}{1-\omega}
+\]
+
+对应单位时间热功率为：
+
+\[
+\dot Q_{req}=\dot m_{wet}\left[c_{eq}(T_m-T_0)+\lambda\frac{\omega_0-\omega}{1-\omega}\right]
+\]
+
+该式用于估算预热炉达到某一目标含水率所需的热量等级。
+
+\manualdivider
+
+\section{干燥动力学模型}\label{ux5e72ux71e5ux52a8ux529bux5b66ux6a21ux578b}
+
+实验数据给出的是各类垃圾在参考温度 \(175^\circ\mathrm{C}\) 下达到某一深度干燥水平所需时间。
+
+对混合垃圾，参考干燥时间为 \(t_{ref}(x)\)，温度敏感性为 \(s(x)\)。
+
+在等效干燥温度 \(T_m\) 下，参考干燥时间写为：
+
+\[
+\tau_{ref}(T_m,x)=t_{ref}(x)+s(x)(T_m-175)
+\]
+
+由于 \(s(x)<0\)，当 \(T_m\) 升高时，达到同一干燥深度所需时间减少。
+
+当前模型允许深度干燥，但不允许含水率降到 0。设模型下限为：
+
+\[
+\omega_{min}=0.05
+\]
+
+则从 \(\omega_0\) 降到任意目标含水率 \(\omega\) 的经验时间缩放为：
+
+\[
+\tau_{dry}(T_m,x,\omega)=\tau_{ref}(T_m,x)\frac{\omega_0(x)-\omega}{\omega_0(x)-\omega_{min}}
+\]
+
+其中：
+
+\[
+\omega_{min}<\omega\le\omega_0
+\]
+
+若 \(\omega=\omega_0\)，则 \(\tau_{dry}=0\)。
+
+若 \(\omega=\omega_{min}\)，则 \(\tau_{dry}=\tau_{ref}\)。
+
+该式不是严格的微观干燥理论，而是面向控制和工程估算的经验动力学模型。它保留了三个关键事实：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  初始含水率越高，需要蒸发的水越多；
+\item
+  温度越高，干燥越快；
+\item
+  深度干燥存在非零下限，避免模型要求完全无水。
+\end{enumerate}
+
+\manualdivider
+
+\section{烟气物性与质量流量}\label{ux70dfux6c14ux7269ux6027ux4e0eux8d28ux91cfux6d41ux91cf}
+
+烟气定压比热取：
+
+\[
+c_{pg}=1.05\ \mathrm{kJ/(kg\cdot K)}
+\]
+
+该值以 \(100\text{--}250^\circ\mathrm{C}\) 附近干空气定压比热为一阶近似，并考虑实际烟气含 \(\mathrm{CO_2}\) 与 \(\mathrm{H_2O}\) 后圆整得到。
+
+烟气密度采用理想气体近似的温度修正形式：
+
+\[
+\rho_g(T)=\rho_{g,ref}\frac{T_{ref,K}}{T+273.15}
+\]
+
+其中：
+
+\[
+\rho_{g,ref}=0.78\ \mathrm{kg/m^3}
+\]
+
+\[
+T_{ref,K}=450\ \mathrm{K}
+\]
+
+\(\rho_{g,ref}\) 与 \(T_{ref,K}\) 以 450 K 附近干空气密度为参考状态，并按烟气组成差异作工程圆整\footnote{干空气密度和定压比热参考 Engineering ToolBox 的干空气热物性表，\href{https://www.engineeringtoolbox.com/dry-air-properties-d_973.html}{Dry Air Properties}。}。
+
+即：
+
+\[
+\rho_g(T)=0.78\frac{450}{T+273.15}
+\]
+
+预热炉换热侧等效流通面积记为 \(A_{flow,eq}\)。
+
+当前设计中，\(A_{flow,eq}\) 表示外夹套与内置导烟管综合后的等效烟气流通能力。
+
+烟气质量流量为：
+
+\[
+\dot m_g=\rho_g(T_g)A_{flow,eq}v_g
+\]
+
+烟气携带的相对环境温度热功率可估算为：
+
+\[
+P_g=\dot m_gc_{pg}(T_g-T_{amb})
+\]
+
+其中：
+
+\[
+T_{amb}=20^\circ\mathrm{C}
+\]
+
+\manualdivider
+
+\section{间接换热模型}\label{ux95f4ux63a5ux6362ux70edux6a21ux578b}
+
+预热炉采用导烟管和外夹套间接换热。总等效换热面积为：
+
+\[
+A_{heat,eq}=A_{shell}+A_{tube,total}
+\]
+
+其中：
+
+\[
+A_{shell}=2\pi r_1L_g
+\]
+
+\[
+A_{tube,total}=6\cdot2\pi r_2L_g
+\]
+
+代入当前尺寸：
+
+\[
+A_{shell}=2\pi\times0.6\times3.2=12.06\ \mathrm{m^2}
+\]
+
+\[
+A_{tube,total}=6\times2\pi\times0.084\times3.2=10.13\ \mathrm{m^2}
+\]
+
+因此：
+
+\[
+A_{heat,eq}=22.19\ \mathrm{m^2}\approx22.20\ \mathrm{m^2}
+\]
+
+烟气侧等效传热系数采用速度相关经验式：
+
+\[
+U(v_g)=U_0+K_Uv_g^n
+\]
+
+该形式用于描述烟气速度升高时对流换热增强、但边际增益递减的工程事实。参数按空气/烟气冷却场景总传热系数约 \(60\text{--}120\ \mathrm{W/(m^2\cdot K)}\) 的常见范围进行两点标定，其中 \(U(3)=60\ \mathrm{W/(m^2\cdot K)}\)、\(U(12)=120\ \mathrm{W/(m^2\cdot K)}\)\footnote{总传热系数范围参考 Engineering ToolBox 中空气冷却换热器和常见换热设备的工程取值，\href{https://www.engineeringtoolbox.com/heat-transfer-coefficients-exchangers-d_450.html}{Overall Heat Transfer Coefficients}。}。
+
+当前取：
+
+\[
+U_0=18.97,
+\qquad K_U=20.09,
+\qquad n=0.65
+\]
+
+即：
+
+\[
+U(v_g)=18.97+20.09v_g^{0.65}
+\]
+
+该式表示烟气速度增大时换热增强，但边际收益递减。
+
+在总体热平衡估算中，烟气向垃圾提供的热功率可写为：
+
+\[
+\dot Q_{sup}=\frac{U(v_g)A_{heat,eq}\Delta T_{eff}}{1000}
+\]
+
+其中，\(\Delta T_{eff}\) 是烟气与垃圾之间的有效温差。
+
+若采用简化平均温度模型，可取：
+
+\[
+\Delta T_{eff}=T_g-T_m
+\]
+
+则：
+
+\[
+\dot Q_{sup}=\frac{U(v_g)A_{heat,eq}(T_g-T_m)}{1000}
+\]
+
+在真实逆流换热器设计校核中，也可使用对数平均温差：
+
+\[
+\Delta T_{lm}=\frac{\Delta T_1-\Delta T_2}{\ln(\Delta T_1/\Delta T_2)}
+\]
+
+其中，\(\Delta T_1\) 和 \(\Delta T_2\) 分别为换热器两端烟气与物料侧的温差。
+
+在后续的 Python 低阶代理实现中会进一步采用沿轴向分段的 \(\varepsilon\)-NTU 形式。
+
+\manualdivider
+
+\section{连续轴向动态模型}\label{ux8fdeux7eedux8f74ux5411ux52a8ux6001ux6a21ux578b}
+
+设轴向坐标为：
+
+\[
+z\in[0,L_g]
+\]
+
+其中，\(z=0\) 为垃圾入口端，\(z=L_g\) 为垃圾出口端。
+
+垃圾平均轴向速度可由平均停留时间估算：
+
+\[
+u_s=\frac{L_g}{\tau_r}
+\]
+
+入口垃圾性质存在前端测量与输送延迟 \(\tau_x\)：
+
+\[
+p_{in,pre}(t)=p_{in}(t-\tau_x)
+\]
+
+当前取：
+
+\[
+\tau_x=5\ \mathrm{s}
+\]
+
+干物质量守恒可写为：
+
+\[
+\frac{\partial m_d}{\partial t}+u_s\frac{\partial m_d}{\partial z}=0
+\]
+
+水质量守恒可写为：
+
+\[
+\frac{\partial m_w}{\partial t}+u_s\frac{\partial m_w}{\partial z}=-r_{evap}(z,t)
+\]
+
+其中，\(r_{evap}(z,t)\) 为单位轴向控制体内的蒸发速率。
+
+湿基含水率由质量关系给出：
+
+\[
+\omega(z,t)=\frac{m_w(z,t)}{m_d(z,t)+m_w(z,t)}
+\]
+
+垃圾侧能量平衡可写为：
+
+\[
+\frac{\partial}{\partial t}\left[C_s(z,t)T_s(z,t)\right]
++u_s\frac{\partial}{\partial z}\left[C_s(z,t)T_s(z,t)\right]
+=q'(z,t)-\lambda r_{evap}(z,t)
+\]
+
+其中：
+
+\[
+C_s(z,t)=m_d(z,t)c_s+m_w(z,t)c_w
+\]
+
+\(q'(z,t)\) 为烟气通过壁面传给垃圾侧的单位轴向热流。
+
+烟气与垃圾反向流动。若仍以 \(z=0\) 到 \(z=L_g\) 作为垃圾运动方向，则烟气入口边界位于 \(z=L_g\)：
+
+\[
+T_g(L_g,t)=T_{g,in}(t)
+\]
+
+烟气侧能量方程可写为：
+
+\[
+\dot m_g c_{pg}\frac{\partial T_g}{\partial z}=q'(z,t)
+\]
+
+换热热流可写为：
+
+\[
+q'(z,t)=U(v_g)a_h\left[T_g(z,t)-T_s(z,t)\right]
+\]
+
+其中，\(a_h\) 为单位长度等效换热面积：
+
+\[
+a_h=\frac{A_{heat,eq}}{L_g}
+\]
+
+当 \(T_g\le T_s\) 时，模型不应继续从烟气向垃圾传热，可取：
+
+\[
+q'(z,t)=\max{U(v_g)a_h[T_g(z,t)-T_s(z,t)],0}
+\]
+
+出口垃圾含水率为：
+
+\[
+\omega_{out}(t)=\omega(L_g,t)
+\]
+
+出口垃圾温度为：
+
+\[
+T_{solid,out}(t)=T_s(L_g,t)
+\]
+
+在实际控制中，需要将连续过程离散化，以便控制器进行状态估计。
+
+\manualdivider
+
+\section{脱水速率限制}\label{ux8131ux6c34ux901fux7387ux9650ux5236}
+
+蒸发速率 \(r_{evap}\) 不能只由热量决定。
+
+真实脱水过程同时受到三类约束：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  可用热量约束；
+\item
+  干燥动力学约束；
+\item
+  剩余可蒸发水量约束。
+\end{enumerate}
+
+能量允许的蒸发量满足：
+
+\[
+\Delta m_{evap,energy}\le\frac{Q_{available}}{\lambda}
+\]
+
+干燥动力学允许的含水率下降可写为：
+
+\[
+\Delta\omega_{kin}\approx\frac{(\omega-\omega_{min})\Delta t}{\tau_{ref}(T_s,x)}
+\]
+
+其中：
+
+\[
+\omega_{min}=0.05
+\]
+
+剩余可蒸发水量约束为：
+
+\[
+m_w\ge m_{w,min}
+\]
+
+其中：
+
+\[
+m_{w,min}=\frac{\omega_{min}}{1-\omega_{min}}m_d
+\]
+
+因此，实际蒸发量取三者中最小者：
+
+\[
+\Delta m_{evap}=\min\left(\Delta m_{evap,energy},\Delta m_{evap,kin},m_w-m_{w,min}\right)
+\]
+
+该处理保证模型不会出现负水分，也不会把温度升高等同于无限快干燥。
+
+\manualdivider
+
+\section{焚烧炉静态代理模型}\label{ux711aux70e7ux7089ux9759ux6001ux4ee3ux7406ux6a21ux578b}
+
+预热炉的控制目标最终通过焚烧炉反馈体现。
+
+焚烧炉静态代理模型描述：当进入焚烧炉的垃圾湿基含水率和干基负荷长期稳定时，焚烧炉会达到什么稳态输出。
+
+当前代理模型来自 COMSOL 静态参数扫描。
+
+输入变量为：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  进入焚烧炉的湿基含水率 \(\omega_b\)；
+\item
+  干基负荷比 \(r_d\)。
+\end{enumerate}
+
+干基负荷比定义为：
+
+\[
+r_d=\frac{\dot m_d}{\dot m_{d,ref}}
+\]
+
+当前参考干基质量流量为：
+
+\[
+\dot m_{d,ref}=0.052\ \mathrm{kg/s}
+\]
+
+焚烧炉静态输出包括：
+
+\[
+y_f^{ss}=\left[T_{avg},T_{stack},v_{stack},T_{surface,min},T_{surface,max},\sigma_T\right]
+\]
+
+其中，\(T_{avg}\) 是燃烧核心区域平均温度，\(T_{stack}\) 是烟囱出口温度，\(v_{stack}\) 是烟囱出口速度，\(T_{surface,min}\)、\(T_{surface,max}\) 和 \(\sigma_T\) 用于描述燃烧面温度范围和均匀性。
+
+静态代理采用多项式形式。令：
+
+\[
+x=r_d-r_{d,0}
+\]
+
+\[
+z=\omega_b-\omega_{b,0}
+\]
+
+其中：
+
+\[
+r_{d,0}=3.0,
+\qquad \omega_{b,0}=0.3218
+\]
+
+对任意输出 \(Y_j\)，有：
+
+\[
+Y_j=\sum_{(a,b)\in\mathcal P}c_{j,a,b}x^az^b
+\]
+
+当前多项式阶数组合为：
+
+\[
+\mathcal P={(0,0),(0,1),(0,2),(0,3),(1,0),(1,1),(1,2),(2,0),(2,1),(3,0)}
+\]
+
+该模型保留了含水率和干基负荷对焚烧炉状态的共同影响。
+
+一般而言，\(\omega_b\) 升高会使 \(T_{avg}\) 和 \(T_{stack}\) 下降；干基负荷变化会改变燃烧强度和烟气速度。
+
+静态代理的有效输入范围为：
+
+\[
+0\le\omega_b\le0.5
+\]
+
+\[
+0.5\le r_d\le3.5
+\]
+
+超出该范围时应视为外推或截断使用。
+
+\manualdivider
+
+\section{焚烧炉动态代理模型}\label{ux711aux70e7ux7089ux52a8ux6001ux4ee3ux7406ux6a21ux578b}
+
+焚烧炉不会对入口垃圾状态变化瞬时响应。
+
+当前动态代理在静态 COMSOL 代理外叠加一个低阶动态壳。
+
+令静态代理输出为：
+
+\[
+y_f^{ss}(t)=F(\omega_b(t),r_d(t))
+\]
+
+实际观测输出为：
+
+\[
+y_f(t)=\begin{bmatrix}T_{avg}(t)\\T_{stack}(t)\\ v_{stack}(t)
+\end{bmatrix}
+\]
+
+对每个输出通道，采用相同动态骨架：
+
+\[
+G_f(s)=\frac{e^{-\tau_fs}}{(\tau_{f1}s+1)(\tau_{f2}s+1)}
+\]
+
+其中：
+
+\[
+\tau_f=5\ \mathrm{s}
+\]
+
+\[
+\tau_{f1}=0.223\ \mathrm{s}
+\]
+
+\[
+\tau_{f2}=75.412\ \mathrm{s}
+\]
+
+因此，可写为：
+
+\[
+y_f(s)=G_f(s)y_f^{ss}(s)
+\]
+
+若写成小扰动形式：
+
+\[
+\Delta y_f(s)=G_f(s)\Delta y_f^{ss}(s)
+\]
+
+该动态壳表示三类物理过程：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  垃圾进入焚烧炉后的前端延迟；
+\item
+  炉壁热容造成的快迟滞；
+\item
+  炉内垃圾混合和燃烧状态建立造成的慢迟滞。
+\end{enumerate}
+
+外部炉温扰动可作为加性扰动加入：
+
+\[
+y_{meas}(t)=y_f(t)+d_f(t)
+\]
+
+其中，\(d_f(t)\) 可表示临时冷风、燃烧恶化、热损失增加或其他未建模因素。
+
+\manualdivider
+
+\section{烟气资源、补热与辅助循环模型}\label{ux70dfux6c14ux8d44ux6e90ux8865ux70edux4e0eux8f85ux52a9ux5faaux73afux6a21ux578b}
+
+预热炉优先使用焚烧炉烟气余热。
+
+焚烧炉观测为：
+
+\[
+y_f(t)=\left[T_{avg}(t),T_{stack}(t),v_{stack}(t)\right]
+\]
+
+自然可用烟气温度定义为：
+
+\[
+T_{stack,avail}=\max(T_{min},T_{stack}-\Delta T_{loss})
+\]
+
+自然可用烟气速度定义为：
+
+\[
+v_{stack,avail}=\max(v_{min},\eta_vv_{stack})
+\]
+
+烟囱截面积为：
+
+\[
+A_s=\pi r_s^2
+\]
+
+其中：
+
+\[
+r_s=0.3\ \mathrm{m}
+\]
+
+该半径来自主焚烧炉 COMSOL 几何模型，用于把烟囱出口速度换算为自然烟气可用质量流量。
+
+即：
+
+\[
+A_s=\pi\times0.3^2=0.2827\ \mathrm{m^2}
+\]
+
+自然烟气质量流量为：
+
+\[
+\dot m_{stack,avail}=\rho_g(T_{stack,avail})A_sv_{stack,avail}
+\]
+
+预热炉换热侧需求质量流量为：
+
+\[
+\dot m_{preheater}=\rho_g(T_g)A_{flow,eq}v_g
+\]
+
+当前设计不把自然烟囱一次通过流量直接作为 \(v_g\) 的硬上限。
+
+\$ v\_g \$ 表示换热侧循环速度。
+
+当自然烟气不足时，系统记录辅助循环需求：
+
+\[
+\dot m_{aux}=\max(\dot m_{preheater}-\dot m_{stack,avail},0)
+\]
+
+当自然烟气温度低于控制器要求的入口温度时，系统记录辅助补热功率：
+
+\[
+\dot Q_{aux}=\dot m_{preheater}c_{pg}\max(T_g-T_{stack,avail},0)
+\]
+
+当前有效烟气入口温度上限为：
+
+\[
+T_{g,max}=1100^\circ\mathrm{C}
+\]
+
+换热侧循环速度上限为：
+
+\[
+v_{g,max}=12\ \mathrm{m/s}
+\]
+
+风机或循环代价采用三次方近似：
+
+\[
+P_{fan}=P_{fan,ref}\left(\frac{v_g}{v_{g,max}}\right)^3
+\]
+
+其中：
+
+\[
+P_{fan,ref}=18\ \mathrm{kW}
+\]
+
+该模型不声称精确表示某台风机的特性曲线，而是用于控制器中表达``高循环速度代价显著增加''的工程事实。
+
+\manualdivider
+
+\section{稳定工作区间}\label{ux7a33ux5b9aux5de5ux4f5cux533aux95f4}
+
+焚烧炉稳定运行要求主要体现在温度边界上。
+
+当前控制目标采用：
+
+\[
+T_{avg,set}=873^\circ\mathrm{C}
+\]
+
+平均炉温安全下限为：
+
+\[
+T_{avg,min}=850^\circ\mathrm{C}
+\]
+
+平均炉温安全上限为：
+
+\[
+T_{avg,max}=1100^\circ\mathrm{C}
+\]
+
+\manualdivider
+
+\chapter{Python 低阶代理模型实现}\label{python-ux4f4eux9636ux6a21ux578bux5b9eux73b0}
+
+本章说明如何把第三章建立的预热炉、焚烧炉和烟气资源模型，转化为一套可以在计算机中逐步推进的 Python 低阶模型。本章的 Python 低阶模型是用于闭环仿真、控制器调参、接口验证和运行逻辑检查的工程代理对象。其价值在于：用较低的计算代价保留主要因果链条，使控制器可以在多种入口垃圾扰动、烟气资源变化和执行器约束下反复测试。
+
+\manualdivider
+
+\section{低阶模型的角色}\label{ux4f4eux9636ux6a21ux578bux5728ux9879ux76eeux4e2dux7684ux89d2ux8272}
+
+在控制系统中，被控制的外部对象通常称为 plant。本文档中的 plant 指控制器之外、接受控制命令并返回观测结果的被控过程。在真实工程中，这个被控过程可以是实际预热炉与焚烧炉；在高保真仿真中，它可以是 COMSOL 或其他数值模型；在本章中，它是一个可快速运行的 Python 低阶代理模型。
+
+本项目中，被控对象模型的 Python 实现与 MPC 控制器内部预测模型具有类似的结构，也就是说，Python 代理模型的建立同时为 MPC 控制器内部用于滚动和优化的预测模型提供了参考，然而在逻辑上，二者的边界必须分清：控制器不能直接读取被控对象内部真实状态。真实设备通常只能提供有限传感器数据，例如焚烧炉平均温度、烟囱温度、烟囱速度、预热炉出口含水率或出口温度，因此，plant 可以在仿真中保存完整内部状态，但控制器只能通过稳定接口获得观测量和估计量。另外，闭环仿真需要允许模型失配。如果控制器内部预测模型与被控对象模型完全共享同一份代码，测试结果容易过于理想，无法暴露参数偏差、响应延迟、模型误差和执行器约束带来的问题。因此，本项目把 \passthrough{\lstinline!plant/python_model!} 与 \passthrough{\lstinline!controller/predictor!} 分开实现。
+
+后续的研究中，将 Python 低阶模型替换为真实设备或 COMSOL 模型时，不应改动控制器主体逻辑。只要新的被控对象后端仍然遵守 \passthrough{\lstinline!PlantBackend!} 接口，运行层就可以把 Python 低阶 plant 替换为 COMSOL backend 或硬件 backend，而控制器只通过 \passthrough{\lstinline!PlantSnapshot!} 接收观测快照。
+
+\manualdivider
+
+\section{项目目录结构与模块职责}\label{ux9879ux76eeux76eeux5f55ux7ed3ux6784ux4e0eux6a21ux5757ux804cux8d23}
+
+本项目的软件结构树如下表所示。
+
+\begin{lstlisting}
+FlameGuard-main/
+├── domain/                 稳定数据结构与接口协议
+│   ├── types.py
+│   └── interfaces.py
+│
+├── plant/                  被控对象后端
+│   ├── factory.py
+│   ├── python_model/        默认 Python 低阶被控对象
+│   ├── comsol/              COMSOL 后端占位
+│   └── hardware/            实机后端占位
+│
+├── controller/             控制器
+│   ├── estimator/           状态估计与扰动估计
+│   ├── predictor/           控制器内部预测模型
+│   ├── operator/            NMPC 或备用控制决策器
+│   └── executor/            控制设定到执行命令的转换
+│
+├── runtime/                仿真运行层
+│   ├── simulator.py         闭环推进
+│   ├── telemetry.py         数据记录
+│   ├── plotting.py          结果绘图
+│   └── tests/               标准测试场景
+│
+└── scripts/                数据拟合与辅助脚本
+\end{lstlisting}
+
+各目录的作用如下。
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{0.20\columnwidth}
+  >{\raggedright\arraybackslash}p{0.32\columnwidth}
+  >{\raggedright\arraybackslash}p{0.40\columnwidth}@{}}
+\toprule
+目录 & 主要职责 & 与第四章的关系 \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\passthrough{\lstinline!domain/!} & 定义跨模块共享的数据结构和接口协议。这里不放物理模型，也不放控制算法。 & 第四章中出现的 \passthrough{\lstinline!FeedstockObservation!}、\passthrough{\lstinline!PlantStepInput!}、\passthrough{\lstinline!PlantSnapshot!} 等对象均来自该目录。 \\
+\passthrough{\lstinline!plant/!} & 表示被控对象后端。它接收执行命令和入口垃圾观测，返回预热炉、焚烧炉和资源状态。 & 第四章重点解释 \passthrough{\lstinline!plant/python_model/!} 的低阶实现。 \\
+\passthrough{\lstinline!controller/!} & 表示控制器。它根据 plant 返回的观测量进行状态估计、预测优化和命令生成。 & 第四章只说明 plant 与 controller 的接口边界，不展开控制器优化算法。 \\
+\passthrough{\lstinline!controller/predictor/!} & 控制器内部预测模型，用于 NMPC rollout。 & 它与 Python plant 结构相似，但属于控制器内部模型，不能与 plant 混作一体。 \\
+\passthrough{\lstinline!runtime/!} & 仿真运行层。它负责装配 plant 与 controller，推进闭环时间，记录结果和绘图。 & 文中 runtime 指“运行调度程序”，不是物理设备，也不是控制算法。 \\
+\passthrough{\lstinline!scripts/!} & 放置数据处理、COMSOL 代理模型拟合和辅助分析脚本。 & 焚烧炉静态代理模型的拟合结果由该目录中的脚本和数据生成。 \\
+\end{longtable}
+
+在 \passthrough{\lstinline!plant/python_model/!} 内部，各文件分工如下。
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{0.26\columnwidth}
+  >{\raggedright\arraybackslash}p{0.66\columnwidth}@{}}
+\toprule
+文件 & 作用 \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\passthrough{\lstinline!config.py!} & 保存几何尺寸、热工参数、边界值和由参数推导出的面积、库存量、停留时间等派生量。 \\
+\passthrough{\lstinline!material_model.py!} & 将入口垃圾观测转换为等效物料性质，包括初始湿基含水率、参考干燥时间、温度敏感性、堆积密度和湿质量流率。 \\
+\passthrough{\lstinline!physics.py!} & 提供烟气密度、换热系数、质量流量、焚烧炉静态代理等基础函数。 \\
+\passthrough{\lstinline!preheater.py!} & 实现预热炉轴向离散模型，负责物料延迟、轴向推进、逆流换热、升温、脱水和诊断量计算。 \\
+\passthrough{\lstinline!furnace.py!} & 实现焚烧炉静态代理和动态壳，将预热炉出口物料转化为焚烧炉观测。 \\
+\passthrough{\lstinline!resource.py!} & 根据焚烧炉烟囱输出计算自然烟气资源、有效执行边界、辅助补热和辅助循环需求。 \\
+\passthrough{\lstinline!actuator.py!} & 描述执行器一阶惯性和命令到实际输入之间的滞后关系。 \\
+\passthrough{\lstinline!backend.py!} & 将上述模块串联为统一的 \passthrough{\lstinline!PythonPlantBackend!}，对外提供 \passthrough{\lstinline!reset!}、\passthrough{\lstinline!step!} 和 \passthrough{\lstinline!observe!} 接口。 \\
+\end{longtable}
+
+\manualdivider
+
+\section{统一接口与关键术语}\label{ux7edfux4e00ux63a5ux53e3ux4e0eux5173ux952eux672fux8bed}
+
+为了让低阶模型可以被运行层、控制器、COMSOL 后端和未来实机后端共同使用，项目将跨层数据结构集中定义在 \passthrough{\lstinline!domain/!} 中。第四章使用的主要术语如下。
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{0.28\columnwidth}
+  >{\raggedright\arraybackslash}p{0.64\columnwidth}@{}}
+\toprule
+术语或对象 & 含义 \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\passthrough{\lstinline!PlantBackend!} & 被控对象后端接口。无论后端是 Python 低阶模型、COMSOL 模型还是实机系统，都应提供 \passthrough{\lstinline!reset!}、\passthrough{\lstinline!step!}、\passthrough{\lstinline!observe!} 三类操作。 \\
+\passthrough{\lstinline!runtime!} & 仿真运行层，负责按时间顺序调用 plant 和 controller，并保存 telemetry。它不是物理模型，也不是控制器。 \\
+\passthrough{\lstinline!FeedstockObservation!} & 入口垃圾观测。它不要求固定六类垃圾比例，而是直接给出水分、参考干燥时间、温度敏感性、堆积密度和湿质量流率等模型需要的物性。 \\
+\passthrough{\lstinline!EquivalentProperties!} & 模型内部使用的等效物料性质，是 \passthrough{\lstinline!FeedstockObservation!} 进入预热炉模型后的紧凑表示。 \\
+\passthrough{\lstinline!ActuatorCommand!} & 执行器命令，包含预热炉入口烟气温度命令 \(T_{g,cmd}\)、循环速度命令 \(v_{g,cmd}\)、辅助补热和辅助循环诊断字段。 \\
+\passthrough{\lstinline!PlantStepInput!} & 运行层发给 plant 的单步输入，包含当前时间、步长、上一周期执行命令和当前入口垃圾观测。 \\
+\passthrough{\lstinline!PlantSnapshot!} & plant 单步推进后的观测快照，包含焚烧炉观测、预热炉出口、可选完整预热炉状态、烟气资源、执行器反馈和健康状态。 \\
+\passthrough{\lstinline!PreheaterState!} & Python 低阶模型中保存的 20 槽预热炉完整内部状态。真实设备不一定能返回该对象。 \\
+\passthrough{\lstinline!PreheaterOutput!} & 轻量预热炉出口对象，只包含出口含水率、出口温度、出料质量流率和烟气出口温度等可观测或可估计量。 \\
+\passthrough{\lstinline!FurnaceObservation!} & 焚烧炉反馈观测，主要包括 \(T_{avg}\)、\(T_{stack}\) 和 \(v_{stack}\)。 \\
+\end{longtable}
+
+一次闭环仿真的信息流可以写成：
+
+\begin{lstlisting}
+测试场景或上游识别
+  -> FeedstockObservation
+  -> PlantStepInput(previous ActuatorCommand, feedstock, dt)
+  -> PlantBackend.step(...)
+  -> PlantSnapshot
+  -> Controller estimator / predictor / operator / executor
+  -> ActuatorCommand
+  -> 下一周期 PlantBackend.step(...)
+\end{lstlisting}
+
+在这个链条中，第四章只解释 \passthrough{\lstinline!PlantBackend.step(...)!} 内部如何把执行命令和入口垃圾观测转化为下一步 \passthrough{\lstinline!PlantSnapshot!}。控制器如何根据快照求解下一步命令，属于后续控制策略章节。
+
+\manualdivider
+
+\section{PythonPlantBackend 的总体步进流程}\label{pythonplantbackend-ux7684ux603bux4f53ux6b65ux8fdbux6d41ux7a0b}
+
+\passthrough{\lstinline!PythonPlantBackend!} 是第四章低阶模型对外暴露的主入口。它把入口垃圾模型、预热炉模型、焚烧炉代理模型和烟气资源模型串联起来，并统一返回 \passthrough{\lstinline!PlantSnapshot!}。
+
+每一步输入为：
+
+\begin{lstlisting}
+PlantStepInput(time_s, dt_s, command, feedstock)
+\end{lstlisting}
+
+其中：
+
+\begin{enumerate}
+\item \passthrough{\lstinline!time_s!} 为当前仿真时刻；
+\item \passthrough{\lstinline!dt_s!} 为本步推进时间；
+\item \passthrough{\lstinline!command!} 为上一周期由执行器层形成的实际命令；
+\item \passthrough{\lstinline!feedstock!} 为当前入口垃圾观测。
+\end{enumerate}
+
+单步推进的逻辑顺序为：
+
+\begin{lstlisting}
+1. 读取 ActuatorCommand 中的 Tg_cmd_C 与 vg_cmd_mps；
+2. 将 FeedstockObservation 转换为 EquivalentProperties；
+3. 推进预热炉轴向模型，得到 PreheaterState 与 PreheaterOutput；
+4. 根据预热炉出口含水率和质量流率构造 FurnaceFeed；
+5. 推进焚烧炉静态代理与动态壳，得到 FurnaceObservation；
+6. 由 FurnaceObservation 计算烟气资源和辅助需求；
+7. 组装 PlantSnapshot 并保存为 last_snapshot。
+\end{lstlisting}
+
+也可以写成紧凑的信息流：
+
+\[
+\begin{aligned}
+&\text{ActuatorCommand}+\text{FeedstockObservation}\\
+&\quad\rightarrow \text{PreheaterForwardModel}
+\rightarrow \text{FurnaceFeed}
+\rightarrow \text{FurnaceDyn}\\
+&\quad\rightarrow \text{ResourceModel}
+\rightarrow \text{PlantSnapshot}
+\end{aligned}
+\]
+
+这里的 \passthrough{\lstinline!PlantSnapshot!} 是一个观测包。它至少包含焚烧炉反馈和预热炉出口信息；在 Python 低阶模型中还会额外包含完整 20 槽状态和详细诊断量，以便调试、画图和检查质量热量守恒。
+
+\manualdivider
+
+\section{配置参数、几何映射与派生量}\label{ux914dux7f6eux53c2ux6570ux51e0ux4f55ux6620ux5c04ux4e0eux6d3eux751fux91cf}
+
+Python 低阶模型使用 \passthrough{\lstinline!Config!} 保存主要设计参数。
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{0.26\columnwidth}
+  >{\raggedright\arraybackslash}p{0.36\columnwidth}
+  >{\raggedright\arraybackslash}p{0.30\columnwidth}@{}}
+\toprule
+参数 & 含义 & 数值或默认值 \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\passthrough{\lstinline!MDOT_W!} & 入口湿垃圾质量流率 & \(20000/86400=0.2315\ \mathrm{kg/s}\) \\
+\passthrough{\lstinline!D!} & 炉体内腔直径 & \(1.2\ \mathrm{m}\) \\
+\passthrough{\lstinline!L!} & 有效炉长 & \(3.2\ \mathrm{m}\) \\
+\passthrough{\lstinline!PHI!} & 工作充填率 & \(0.14\) \\
+\passthrough{\lstinline!DTUBE!} & 单根导烟管外径 & \(0.168\ \mathrm{m}\) \\
+\passthrough{\lstinline!N_TUBES!} & 导烟管数量 & \(6\) \\
+\passthrough{\lstinline!R_DUCT!} & 等效烟气流通半径 & \(0.4\ \mathrm{m}\) \\
+\passthrough{\lstinline!R_STACK!} & 主焚烧炉烟囱半径 & \(0.3\ \mathrm{m}\) \\
+\passthrough{\lstinline!RHO_BULK!} & 湿垃圾堆积密度 & \(450\ \mathrm{kg/m^3}\) \\
+\passthrough{\lstinline!U0,K_U,N_U!} & 速度相关换热系数参数 & \(18.97,\ 20.09,\ 0.65\) \\
+\passthrough{\lstinline!CS,CW,CPG!} & 干垃圾、水、烟气比热 & \(1.70,\ 4.1844,\ 1.05\ \mathrm{kJ/(kg\cdot K)}\) \\
+\passthrough{\lstinline!LAMBDA!} & 水汽化潜热 & \(2257.9\ \mathrm{kJ/kg}\) \\
+\passthrough{\lstinline!OMEGA_MODEL_MIN!} & 低阶模型允许的最小湿基含水率 & \(0.05\) \\
+\passthrough{\lstinline!OMEGA_MODEL_MAX!} & 低阶模型允许的最大湿基含水率 & \(0.98\) \\
+\end{longtable}
+
+由这些基础参数可得到若干派生量。烟气质量流量采用等效流通面积：
+
+\[
+A_{flow,eq}=\pi R_{DUCT}^2
+\]
+
+烟囱截面积为：
+
+\[
+A_s=\pi R_{STACK}^2
+\]
+
+预热炉等效换热面积为：
+
+\[
+A_{heat,eq}=\pi DL+N_{tubes}\pi D_{tube}L
+\]
+
+其中，第一项表示滚筒内壁换热面积，第二项表示六根导烟管外表面积。需要注意，\(A_{flow,eq}\) 和 \(A_{heat,eq}\) 不是同一个面积：前者用于计算烟气质量流量，后者用于计算换热能力。把二者混用会导致烟气流量或供热能力被错误估计。
+
+炉内湿垃圾平均库存量为：
+
+\[
+M_h=\rho_b\phi\frac{\pi D^2}{4}L
+\]
+
+平均停留时间为：
+
+\[
+\tau_r=\frac{M_h}{\dot m_{wet}}
+\]
+
+在当前参数下：
+
+\[
+M_h=228.0\ \mathrm{kg},\qquad \tau_r=985.0\ \mathrm{s}=16.42\ \mathrm{min}
+\]
+
+该停留时间不是控制器任意设定的时间常数，而是由设备几何、充填率、堆积密度和处理规模共同决定的平均物料停留时间。后文的 20 槽轴向离散正是围绕这一时间尺度展开。
+
+\manualdivider
+
+\section{入口垃圾观测与等效物料性质}\label{ux5165ux53e3ux5783ux573eux89c2ux6d4bux4e0eux7b49ux6548ux7269ux6599ux6027ux8d28}
+
+第三章采用六类典型垃圾比例说明等效物料参数的构造方式，但软件接口不能要求现场必须识别出固定六类比例。真实工程中，入口垃圾信息可能来自视觉识别、水分仪、人工采样、上游数据库或多源融合算法。因此，Python plant 的稳定入口是 \passthrough{\lstinline!FeedstockObservation!}，而不是六类垃圾比例本身。
+
+该对象包含：
+
+\begin{lstlisting}
+moisture_wb
+drying_time_ref_min
+drying_sensitivity_min_per_C
+bulk_density_kg_m3
+wet_mass_flow_kgps
+source
+confidence
+raw
+\end{lstlisting}
+
+各字段含义为：
+
+\begin{enumerate}
+\item \passthrough{\lstinline!moisture_wb!}：入口垃圾湿基含水率 \(\omega_0\)；
+\item \passthrough{\lstinline!drying_time_ref_min!}：参考温度 \(175^\circ\mathrm{C}\) 下达到 20\% 含水率的时间 \(t_{ref}\)；
+\item \passthrough{\lstinline!drying_sensitivity_min_per_C!}：干燥时间对温度的敏感性 \(s\)，通常为负值；
+\item \passthrough{\lstinline!bulk_density_kg_m3!}：堆积密度，可缺省；
+\item \passthrough{\lstinline!wet_mass_flow_kgps!}：入口湿垃圾质量流率，可缺省；
+\item \passthrough{\lstinline!source!}、\passthrough{\lstinline!confidence!}、\passthrough{\lstinline!raw!}：用于记录数据来源、可信度和原始信息。
+\end{enumerate}
+
+模型内部会将其转换为 \passthrough{\lstinline!EquivalentProperties!}：
+
+\begin{lstlisting}
+omega0
+tref_min
+slope_min_per_c
+bulk_density_kg_m3
+wet_mass_flow_kgps
+\end{lstlisting}
+
+六类垃圾比例仍然可以用于构造标准测试场景，但它属于测试适配器。进入 plant 和 controller 之前，六类比例必须先被转换为上述等效物料性质。这样的设计可以避免把早期实验中的分类方法固化为整个系统的唯一入口。
+
+当上游给出湿质量流率 \(\dot m_{wet}\) 时，单个轴向控制体的入口湿质量按下式确定：
+
+\[
+M_{cell,in}=\dot m_{wet}\tau_{cell}
+\]
+
+若没有给出湿质量流率，则使用堆积密度相对于默认堆积密度的比例修正名义 cell 库存。这一分支主要用于早期测试和缺省数据情形，正式工程计算应优先使用明确的湿质量流率。
+
+\manualdivider
+
+\section{轴向离散与物料输送}\label{ux8f74ux5411ux79bbux6563ux4e0eux7269ux6599ux8f93ux9001}
+
+真实预热炉是连续轴向设备，垃圾从入口缓慢移动到出口，同时受到外夹套和内置导烟管的间接加热。Python 低阶模型将其离散为 \(N\) 个轴向控制体，当前默认：
+
+\[
+N=20
+\]
+
+每个控制体代表一段轴向物料。垃圾从 cell 0 流向 cell \(N-1\)，其中 cell 0 靠近入口，cell \(N-1\) 靠近出口。单个控制体对应的平均停留时间为：
+
+\[
+\tau_{cell}=\frac{\tau_r}{N}
+\]
+
+代入当前参数：
+
+\[
+\tau_{cell}=\frac{985}{20}=49.25\ \mathrm{s}
+\]
+
+每个 cell 保存干物质量、水质量、湿基含水率、固体温度和等效干燥参数：
+
+\begin{lstlisting}
+dry_mass
+water_mass
+omega
+T_solid
+omega0
+tref
+slope
+bulk_density
+\end{lstlisting}
+
+其中，\passthrough{\lstinline!omega!} 不是独立推进的守恒变量，而是由水质量和干物质量派生：
+
+\[
+\omega_i=\frac{m_{w,i}}{m_{d,i}+m_{w,i}}
+\]
+
+这样写的原因是：脱水过程中水质量会减少，干物质量应保持守恒。如果直接对含水率做混合，可能在数值上破坏质量守恒；而分别推进 \(m_d\) 和 \(m_w\)，再反算 \(\omega\)，可以更稳定地保持物理含义。
+
+每一步离散推进时，模型先计算物料替换比例：
+
+\[
+\gamma=\min\left(\frac{\Delta t}{\tau_{cell}},1\right)
+\]
+
+其中，\(\gamma\) 表示在当前时间步内，每个 cell 有多大比例被上游物料替换。对 \(i>0\) 的 cell：
+
+\[
+m_{d,i}^{k+1}=(1-\gamma)m_{d,i}^{k}+\gamma m_{d,i-1}^{k}
+\]
+
+\[
+m_{w,i}^{k+1}=(1-\gamma)m_{w,i}^{k}+\gamma m_{w,i-1}^{k}
+\]
+
+cell 0 的上游不是另一个 cell，而是经过前端延迟后的入口物料：
+
+\[
+m_{d,0}^{k+1}=(1-\gamma)m_{d,0}^{k}+\gamma m_{d,in}^{k}
+\]
+
+\[
+m_{w,0}^{k+1}=(1-\gamma)m_{w,0}^{k}+\gamma m_{w,in}^{k}
+\]
+
+温度混合采用热容加权。令：
+
+\[
+C_i=m_{d,i}c_s+m_{w,i}c_w
+\]
+
+则相邻 cell 混合后的固体温度按热量守恒近似为：
+
+\[
+T_{s,i}^{k+1}
+=
+\frac{(1-\gamma)C_i^kT_{s,i}^k+\gamma C_{i-1}^kT_{s,i-1}^k}
+{(1-\gamma)C_i^k+\gamma C_{i-1}^k}
+\]
+
+入口物料温度默认取环境温度：
+
+\[
+T_{s,in}=T_{amb}=20^\circ\mathrm{C}
+\]
+
+\manualdivider
+
+\section{前端测量延迟}\label{ux524dux7aefux6d4bux91cfux5ef6ux8fdf}
+
+入口垃圾性质从测量点到预热炉入口存在输送延迟。若传感器或上游识别系统在时刻 \(t\) 给出垃圾物性，该物料不会立刻进入预热炉入口，而是在经过输送带、给料口和过渡段后才到达 cell 0。当前模型取：
+
+\[
+\tau_x=5\ \mathrm{s}
+\]
+
+连续形式可写为：
+
+\[
+p_{pre,in}(t)=p_{in}(t-\tau_x)
+\]
+
+其中，\(p\) 表示等效物料性质向量：
+
+\[
+p=
+\begin{bmatrix}
+\omega_0\\
+t_{ref}\\
+s\\
+\rho_b\\
+\dot m_{wet}
+\end{bmatrix}
+\]
+
+Python 模型使用时间队列保存历史入口物料性质：
+
+\begin{lstlisting}
+[(time_s, EquivalentProperties), ...]
+\end{lstlisting}
+
+每一步根据：
+
+\[
+t_{target}=t-\tau_x
+\]
+
+从队列中取出延迟后的入口物料性质。如果 \(t_{target}\) 位于两个历史采样点之间，则对 \(\omega_0\)、\(t_{ref}\)、\(s\)、\(\rho_b\) 和 \(\dot m_{wet}\) 做线性插值。这样，前端延迟不依赖控制器步长，也不依赖预热炉 cell 数量。
+
+\manualdivider
+
+\section{逆流烟气与换热计算}\label{ux9006ux6d41ux70dfux6c14ux4e0eux6362ux70edux8ba1ux7b97}
+
+真实设备中，烟气通过外夹套和内置导烟管与垃圾间接换热。Python 低阶模型不分别求解外夹套和每根导烟管的局部流场，而是把它们合并为一个等效烟气通道。该等效通道需要两个面积参数：
+
+\begin{enumerate}
+\item \(A_{flow}\)：用于计算烟气质量流量的等效流通面积；
+\item \(A_{heat}\)：用于计算壁面换热的等效传热面积。
+\end{enumerate}
+
+默认情况下：
+
+\[
+A_{flow}=A_{flow,eq}
+\]
+
+\[
+A_{heat}=A_{heat,eq}
+\]
+
+烟气默认与垃圾逆流。垃圾从 cell 0 流向 cell \(N-1\)，烟气从靠近垃圾出口的一侧进入，依次经过：
+
+\begin{lstlisting}
+cell N-1 -> cell N-2 -> ... -> cell 0
+\end{lstlisting}
+
+烟气质量流量为：
+
+\[
+\dot m_g=\rho_g(T_g)A_{flow}v_g
+\]
+
+其中，\(T_g\) 为预热炉入口烟气温度，\(v_g\) 为换热侧等效循环速度，\(\rho_g(T_g)\) 为按温度修正后的烟气密度。烟气热容流率为：
+
+\[
+C_g=\dot m_gc_{pg}
+\]
+
+单个 cell 分配到的换热面积为：
+
+\[
+A_i=\frac{A_{heat}}{N}
+\]
+
+每个 cell 的换热采用 \(\varepsilon\)-NTU 形式，而不是直接使用显式 \(UA\Delta T\)。其目的是避免在较大时间步或较强换热条件下，烟气被数值上冷却到低于垃圾温度。对第 \(i\) 个 cell：
+
+\[
+NTU_i=\frac{U(v_g)A_i}{C_g}
+\]
+
+\[
+\varepsilon_i=1-e^{-NTU_i}
+\]
+
+若该 cell 入口烟气温度高于固体温度，则：
+
+\[
+Q_i=C_g(T_{g,i}-T_{s,i})\varepsilon_i
+\]
+
+烟气离开该 cell 后温度为：
+
+\[
+T_{g,i,out}=T_{g,i}-\frac{Q_i}{C_g}
+\]
+
+若 \(T_{g,i}\le T_{s,i}\)，则认为该 cell 不再从烟气向垃圾吸热：
+
+\[
+Q_i=0
+\]
+
+这样处理保留了逆流换热的方向性，也避免了低阶模型在局部产生非物理反向加热。
+
+\manualdivider
+
+\section{显热、潜热与脱水计算}\label{ux663eux70edux6f5cux70edux4e0eux8131ux6c34ux8ba1ux7b97}
+
+每个 cell 从烟气获得热量后，模型按“先升温、后蒸发”的顺序分配能量。若固体温度低于水的蒸发温度：
+
+\[
+T_{s,i}<100^\circ\mathrm{C}
+\]
+
+则热量优先用于升温。升温到 \(100^\circ\mathrm{C}\) 所需热量为：
+
+\[
+E_{to100}=C_i(100-T_{s,i})
+\]
+
+若本步获得热量 \(E_i\) 不足以升温到 \(100^\circ\mathrm{C}\)，则只发生显热升温：
+
+\[
+T_{s,i}^{new}=T_{s,i}+\frac{E_i}{C_i}
+\]
+
+若升温后仍有剩余热量，则进入蒸发过程。模型允许高温阶段的一部分热量用于蒸发，当前比例为：
+
+\[
+\eta_{evap}=0.85
+\]
+
+能量约束允许的蒸发水量为：
+
+\[
+\Delta m_{energy}=\frac{\eta_{evap}E_{high}}{\lambda}
+\]
+
+但实际蒸发量还不能只由能量决定，因为垃圾内部水分迁移和表面蒸发速率有限。因此模型同时引入干燥动力学约束。第三章中的参考干燥时间为：
+
+\[
+\tau_{20}=t_{ref}+s(T_s-175)
+\]
+
+代码中将其转换为秒，并使用最小时间 \(\tau_{min}\) 防止 \(\tau_{20}\) 在高温下变成非正数：
+
+\[
+\tau_{20,s}=60\max(\tau_{min},t_{ref}+s(T_s-175))
+\]
+
+若当前含水率为 \(\omega_i\)，则动力学允许的新含水率为：
+
+\[
+\omega_{kin,new}
+=
+\max\left(
+\omega_{min},
+\omega_i-\frac{(\omega_i-\omega_{min})\Delta t}{\tau_{20,s}}
+\right)
+\]
+
+由 \(\omega_{kin,new}\) 可以换算出动力学允许蒸发水量 \(\Delta m_{kin}\)。同时，剩余水量不能低于模型下限：
+
+\[
+m_{w,min}=\frac{\omega_{min}}{1-\omega_{min}}m_d
+\]
+
+因此，最终蒸发量为：
+
+\[
+\Delta m_{evap}
+=
+\min(\Delta m_{energy},\Delta m_{kin},m_w-m_{w,min})
+\]
+
+水质量更新为：
+
+\[
+m_w^{new}=m_w-\Delta m_{evap}
+\]
+
+干物质量保持不变。蒸发消耗的潜热为：
+
+\[
+E_{latent}=\lambda\Delta m_{evap}
+\]
+
+未被潜热消耗的剩余热量继续用于升高固体温度。固体温度被限制在：
+
+\[
+20^\circ\mathrm{C}\le T_s\le250^\circ\mathrm{C}
+\]
+
+其中 \(250^\circ\mathrm{C}\) 是低阶模型的保护上限，用来避免模型进入热解、焦化或其他不属于低温预热脱水的状态区间。
+
+\manualdivider
+
+\section{预热炉输出与诊断量}\label{ux9884ux70edux7089ux8f93ux51faux4e0eux8bcaux65adux91cf}
+
+每次预热炉模型推进后，会得到完整 \passthrough{\lstinline!PreheaterState!} 和轻量 \passthrough{\lstinline!PreheaterOutput!}。二者的区别在于：前者用于仿真解释和控制器状态估计校验，后者代表真实设备更可能提供或估计到的出口信息。
+
+完整状态主要包含：
+
+\begin{lstlisting}
+time_s
+cells
+omega_out
+T_solid_out_C
+Tg_profile_C
+\end{lstlisting}
+
+其中：
+
+\[
+\omega_{out}=\omega_{N-1}
+\]
+
+\[
+T_{solid,out}=T_{s,N-1}
+\]
+
+每个 cell 状态包含：
+
+\begin{lstlisting}
+index
+z_center_m
+residence_left_s
+omega
+T_solid_C
+omega0
+tref_min
+slope_min_per_c
+dry_mass_kg
+water_mass_kg
+bulk_density_kg_m3
+\end{lstlisting}
+
+\passthrough{\lstinline!residence_left_s!} 表示该 cell 中物料距离出口还剩多少平均停留时间。它不是额外的物理状态，而是根据 cell 位置和平均停留时间推导出的解释性量。
+
+模型还记录 \passthrough{\lstinline!PreheaterDiagnostics!}，用于检查热平衡、质量守恒和运行代价：
+
+\begin{lstlisting}
+Tg_in_C
+Tg_out_C
+vg_mps
+mdot_gas_kgps
+U_eff_W_m2K
+Q_gas_to_solid_kW
+Q_sensible_kW
+Q_latent_kW
+heat_balance_residual_kW
+water_evap_kgps
+dry_out_kgps
+water_out_kgps
+wet_out_kgps
+inventory_dry_kg
+inventory_water_kg
+inventory_total_kg
+Tg_cell_min_C
+Tg_cell_max_C
+\end{lstlisting}
+
+这些诊断量并不一定都能在实机上直接测得，但对模型验证非常重要。例如，若 \(Q_{gas\to solid}\) 与显热、潜热之和长期差异很大，说明换热或蒸发计算可能存在不一致；若 \(\dot m_{wet,out}\) 与入口质量流率长期不匹配，则需要检查库存初始化、推进步长或出料估算。
+
+\manualdivider
+
+\section{焚烧炉代理模型实现}\label{ux711aux70e7ux7089ux4ee3ux7406ux6a21ux578bux5b9eux73b0}
+
+预热炉出口并不是闭环系统的最终输出。预热后的垃圾还会进入主焚烧炉，并通过含水率和干基负荷影响焚烧炉温度、烟囱温度和烟囱速度。因此，Python plant 在预热炉模型之后还串联了焚烧炉代理模型。
+
+预热炉出口诊断量被组装为 \passthrough{\lstinline!FurnaceFeed!}：
+
+\begin{lstlisting}
+omega_b
+mdot_d_kgps
+mdot_water_kgps
+mdot_wet_kgps
+rd
+\end{lstlisting}
+
+其中：
+
+\[
+\omega_b=\omega_{out}
+\]
+
+表示进入焚烧炉的湿基含水率。干基负荷比定义为：
+
+\[
+r_d=\frac{\dot m_d}{\dot m_{d,ref}}
+\]
+
+当前参考干基质量流率为：
+
+\[
+\dot m_{d,ref}=0.052\ \mathrm{kg/s}
+\]
+
+\(r_d\) 是 COMSOL 静态代理模型中的负荷坐标，用于描述进入焚烧炉的干物质量相对于基准工况的变化。这样，焚烧炉静态代理不再只由含水率决定，而是由“湿基含水率”和“干基负荷比”共同决定。
+
+焚烧炉静态代理输入为：
+
+\[
+(\omega_b,r_d)
+\]
+
+输出包括：
+
+\begin{lstlisting}
+T_avg_C
+T_stack_C
+v_stack_mps
+T_surface_min_C
+T_surface_max_C
+T_surface_std_C
+\end{lstlisting}
+
+输入会被限制在 COMSOL 拟合数据的有效范围内：
+
+\[
+0\le\omega_b\le0.5
+\]
+
+\[
+0.5\le r_d\le3.5
+\]
+
+这种限幅不是物理上认为超出范围不可能，而是表示代理模型超出训练或拟合范围时不宜外推。静态代理输出再经过动态壳，动态壳包含：
+
+\begin{enumerate}
+\item \(5\ \mathrm{s}\) 纯延迟；
+\item \(0.223\ \mathrm{s}\) 快一阶惯性；
+\item \(75.412\ \mathrm{s}\) 慢一阶惯性。
+\end{enumerate}
+
+最终得到控制器可见的焚烧炉观测：
+
+\begin{lstlisting}
+FurnaceObservation(time_s, T_avg_C, T_stack_C, v_stack_mps)
+\end{lstlisting}
+
+该观测是控制器判断焚烧状态的主要反馈来源。
+
+\manualdivider
+
+\section{烟气资源、补热与辅助循环诊断}\label{ux70dfux6c14ux8d44ux6e90ux8865ux70edux4e0eux8f85ux52a9ux5faaux73afux8bcaux65ad}
+
+烟气资源模型根据焚烧炉观测估计当前自然烟气资源，并计算预热炉命令是否需要辅助补热或辅助循环。这里需要区分两类边界：一类是自然烟囱资源，另一类是含辅助装置后的有效执行边界。
+
+自然可用烟气温度为：
+
+\[
+T_{stack,avail}=\max(T_{min},T_{stack}-\Delta T_{loss})
+\]
+
+自然可用烟气速度为：
+
+\[
+v_{stack,avail}=\max(v_{min},\eta_vv_{stack})
+\]
+
+自然烟气质量流量为：
+
+\[
+\dot m_{stack,avail}
+=
+\rho_g(T_{stack,avail})A_sv_{stack,avail}
+\]
+
+自然资源表示“主焚烧炉烟囱当前能够直接提供什么”。但在当前设计中，预热炉换热侧的 \(v_g\) 被解释为循环侧等效速度，不等同于烟囱一次通过速度。因此，自然烟囱质量流量不是 \(v_g\) 的硬上限。当预热炉换热侧需求质量流量超过自然烟气一次通过能力时，模型不直接判定命令失败，而是记录辅助循环需求：
+
+\[
+\dot m_{aux}
+=
+\max(\dot m_{preheater}-\dot m_{stack,avail},0)
+\]
+
+同理，若目标预热炉入口烟气温度 \(T_g\) 高于自然可用烟气温度，则模型记录辅助补热需求：
+
+\[
+\dot Q_{aux}
+=
+\dot m_{preheater}c_{pg}\max(T_g-T_{stack,avail},0)
+\]
+
+当前有效执行边界为：
+
+\[
+T_{g,cap}^{eff}=1100^\circ\mathrm{C}
+\]
+
+\[
+v_{g,cap}^{eff}=12\ \mathrm{m/s}
+\]
+
+其中，\(T_{g,cap}^{eff}\) 表示在允许辅助补热参与时，预热炉入口烟气温度的有效上限；\(v_{g,cap}^{eff}\) 表示换热侧等效循环速度上限。补热量、辅助循环流量和风机功率作为 telemetry、metrics 和控制代价的一部分，而不是单纯作为硬失败条件。这样可以在闭环测试中区分“自然余热足够的工况”和“需要额外设备支撑的工况”。
+
+\manualdivider
+
+\section{执行器命令与实际输入}\label{ux6267ux884cux5668ux547dux4ee4ux4e0eux5b9eux9645ux8f93ux5165}
+
+控制器或执行器层给出的 \passthrough{\lstinline!ActuatorCommand!} 包含多项字段，但真正进入预热炉低阶模型、直接影响换热和脱水的是：
+
+\begin{lstlisting}
+Tg_cmd_C
+vg_cmd_mps
+\end{lstlisting}
+
+其中，\passthrough{\lstinline!Tg_cmd_C!} 表示预热炉入口烟气温度命令，\passthrough{\lstinline!vg_cmd_mps!} 表示预热炉换热侧等效循环速度命令。其余诊断字段包括：
+
+\begin{lstlisting}
+Q_aux_heat_kW
+aux_heat_required
+aux_circulation_required
+fan_circulation_power_kW
+\end{lstlisting}
+
+这些字段主要用于记录资源需求、辅助装置状态和能耗代价。
+
+如果接入了执行器动态模型，则命令值不会瞬时等于实际进入预热炉的 \(T_g\) 和 \(v_g\)。例如温度通道可以用一阶惯性近似：
+
+\[
+G_T(s)=\frac{1}{3s+1}
+\]
+
+速度通道可以用较快的一阶惯性近似：
+
+\[
+G_v(s)=\frac{1}{s+1}
+\]
+
+在这种情况下，\passthrough{\lstinline!ActuatorCommand!} 表示控制器希望执行的命令，\passthrough{\lstinline!ActuatorFeedback!} 表示被控对象实际感受到的输入或执行器反馈。Python plant 可以在仿真中直接使用命令值，也可以在执行器模块中加入滞后后再送入预热炉模型；文档中必须区分“命令输入”和“实际输入”，否则会误以为控制器能够瞬时改变烟气状态。
+
+\manualdivider
+
+\section{其他后端与低阶模型的适用边界}\label{ux4e0eux771fux5b9eux8bbeux5907ux548c-comsol-ux540eux7aefux7684ux5173ux7cfb}
+
+Python plant 的意义是提供一个可运行、可调参、可复现的低阶被控对象。它不是唯一后端。未来若接入 COMSOL 或真实设备，只要实现相同的 \passthrough{\lstinline!PlantBackend!} 语义即可：
+
+\begin{lstlisting}
+reset(initial) -> PlantSnapshot
+step(PlantStepInput) -> PlantSnapshot
+observe() -> PlantSnapshot
+\end{lstlisting}
+
+对于真实设备，\passthrough{\lstinline!PlantSnapshot!} 中通常只能可靠提供：
+
+\begin{lstlisting}
+FurnaceObservation
+PreheaterOutput
+StackResourceMeasurement
+ActuatorFeedback
+PlantHealth
+\end{lstlisting}
+
+完整 \passthrough{\lstinline!PreheaterState!} 可以为空，因为真实设备不一定能观测每个轴向 cell 的内部含水率、温度和质量。控制器状态估计器会根据历史入口垃圾、历史命令和有限测量重建内部状态估计。
+
+Python 低阶模型用于设计验证和控制测试，不等同于最终实机标定模型。使用该模型时需要注意以下边界：
+
+\begin{enumerate}
+\item 预热炉内真实颗粒运动被平均停留时间和轴向离散近似；
+\item 烟气分配被合并为单一等效烟气通道；
+\item 导烟管与外夹套的局部分布效应被等效面积吸收；
+\item 干燥动力学采用经验时间缩放，不是完整多孔介质干燥模型；
+\item 深度干燥下限 \(\omega_{min}=0.05\) 需要通过实验或实机数据校核；
+\item 固体温度上限 \(250^\circ\mathrm{C}\) 是低阶模型中的数值和物理保护；
+\item 焚烧炉静态代理由 COMSOL 数据拟合，超出输入范围时属于外推；
+\item 风机功率为诊断模型，不替代真实风机曲线；
+\item 补热和辅助循环需求是控制与能耗诊断，不等同于完整设备选型计算；
+\item Python plant 的完整内部状态主要服务于仿真和解释，不能假定真实设备均能直接测得。
+\end{enumerate}
+
+因此，本章模型应被理解为一套可复现的低阶工程代理：它足以支撑闭环控制逻辑开发、接口验证和初步性能分析，但最终设备参数、执行器能力、烟气管路阻力、干燥动力学和焚烧炉代理仍需要通过实验、COMSOL 高保真模型或现场数据进一步校核。
+
+
+\end{document}

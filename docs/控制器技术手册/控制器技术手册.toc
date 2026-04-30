@@ -1,0 +1,129 @@
+\contentsline {chapter}{\numberline {第一章\hspace {.3em}}概述}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}控制器的工程定位}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}控制因果链}{2}{section.1.2}%
+\contentsline {section}{\numberline {1.3}控制目标}{2}{section.1.3}%
+\contentsline {subsection}{\numberline {1.3.1}主控制目标}{2}{subsection.1.3.1}%
+\contentsline {subsection}{\numberline {1.3.2}执行约束目标}{2}{subsection.1.3.2}%
+\contentsline {subsection}{\numberline {1.3.3}资源经济性目标}{3}{subsection.1.3.3}%
+\contentsline {subsection}{\numberline {1.3.4}异常工况目标}{3}{subsection.1.3.4}%
+\contentsline {section}{\numberline {1.4}闭环链路}{3}{section.1.4}%
+\contentsline {section}{\numberline {1.5}安全边界与责任边界}{4}{section.1.5}%
+\contentsline {chapter}{\numberline {第二章\hspace {.3em}}变量名与接口约定}{6}{chapter.2}%
+\contentsline {section}{\numberline {2.1}变量命名原则}{6}{section.2.1}%
+\contentsline {section}{\numberline {2.2}控制变量与执行命令}{7}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}热风温度变量族}{7}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}气流速度变量族}{8}{subsection.2.2.2}%
+\contentsline {subsection}{\numberline {2.2.3}参考值到命令值的转换关系}{8}{subsection.2.2.3}%
+\contentsline {section}{\numberline {2.3}预热炉相关观测量}{9}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}入口垃圾观测}{9}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2}预热炉内部状态}{10}{subsection.2.3.2}%
+\contentsline {subsection}{\numberline {2.3.3}预热炉轻量输出}{10}{subsection.2.3.3}%
+\contentsline {section}{\numberline {2.4}焚烧炉相关观测量}{10}{section.2.4}%
+\contentsline {section}{\numberline {2.5}预热炉--焚烧炉耦合变量}{11}{section.2.5}%
+\contentsline {subsection}{\numberline {2.5.1}$\omega _{out}$ 与 $\omega _b$ 的区别}{11}{subsection.2.5.1}%
+\contentsline {subsection}{\numberline {2.5.2}干基质量流率比 $r_d$}{12}{subsection.2.5.2}%
+\contentsline {subsection}{\numberline {2.5.3}质量流率一致性}{12}{subsection.2.5.3}%
+\contentsline {section}{\numberline {2.6}资源、执行器与诊断变量}{12}{section.2.6}%
+\contentsline {section}{\numberline {2.7}接口数据结构约定}{13}{section.2.7}%
+\contentsline {subsection}{\numberline {2.7.1}现场观测接口：PlantSnapshot}{13}{subsection.2.7.1}%
+\contentsline {subsection}{\numberline {2.7.2}状态估计接口：StateEstimate}{14}{subsection.2.7.2}%
+\contentsline {subsection}{\numberline {2.7.3}控制上下文接口：OperatorContext}{14}{subsection.2.7.3}%
+\contentsline {subsection}{\numberline {2.7.4}控制输出接口：ControlSetpoint 与 MPCDecision}{15}{subsection.2.7.4}%
+\contentsline {subsection}{\numberline {2.7.5}执行命令接口：ActuatorCommand}{15}{subsection.2.7.5}%
+\contentsline {section}{\numberline {2.8}单位、符号与时间尺度约定}{16}{section.2.8}%
+\contentsline {subsection}{\numberline {2.8.1}单位约定}{16}{subsection.2.8.1}%
+\contentsline {subsection}{\numberline {2.8.2}时间尺度约定}{17}{subsection.2.8.2}%
+\contentsline {subsection}{\numberline {2.8.3}符号约定}{17}{subsection.2.8.3}%
+\contentsline {section}{\numberline {2.9}接口调用方向与模块责任边界}{18}{section.2.9}%
+\contentsline {chapter}{\numberline {第三章\hspace {.3em}}模型预测控制}{19}{chapter.3}%
+\contentsline {section}{\numberline {3.1}控制问题的基本特征}{19}{section.3.1}%
+\contentsline {section}{\numberline {3.2}模型预测控制的基本思想}{20}{section.3.2}%
+\contentsline {section}{\numberline {3.3}稳燃宝 MPC 的控制对象表达}{21}{section.3.3}%
+\contentsline {section}{\numberline {3.4}目标函数的设计思路}{22}{section.3.4}%
+\contentsline {section}{\numberline {3.5}约束条件的设计思路}{23}{section.3.5}%
+\contentsline {section}{\numberline {3.6}预测视界、控制分块与重优化}{24}{section.3.6}%
+\contentsline {section}{\numberline {3.7}动态含水率目标}{25}{section.3.7}%
+\contentsline {section}{\numberline {3.8}安全恢复策略}{25}{section.3.8}%
+\contentsline {chapter}{\numberline {第四章\hspace {.3em}}MPC 控制器的 Python 实现}{27}{chapter.4}%
+\contentsline {section}{\numberline {4.1}实现范围}{28}{section.4.1}%
+\contentsline {section}{\numberline {4.2}公共数据结构与接口}{29}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}观测快照 PlantSnapshot}{29}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2}状态估计 StateEstimate}{29}{subsection.4.2.2}%
+\contentsline {subsection}{\numberline {4.2.3}预测模型集合 PredictorBundle}{30}{subsection.4.2.3}%
+\contentsline {subsection}{\numberline {4.2.4}控制上下文 OperatorContext}{30}{subsection.4.2.4}%
+\contentsline {subsection}{\numberline {4.2.5}决策输出 MPCDecision}{30}{subsection.4.2.5}%
+\contentsline {subsection}{\numberline {4.2.6}执行设定与命令}{31}{subsection.4.2.6}%
+\contentsline {section}{\numberline {4.3}状态估计器实现}{32}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}完整状态同步路径}{32}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}有限观测数字孪生路径}{32}{subsection.4.3.2}%
+\contentsline {subsection}{\numberline {4.3.3}炉膛扰动残差估计}{32}{subsection.4.3.3}%
+\contentsline {section}{\numberline {4.4}控制器内部预测模型实现}{33}{section.4.4}%
+\contentsline {subsection}{\numberline {4.4.1}预热炉 predictor}{33}{subsection.4.4.1}%
+\contentsline {subsection}{\numberline {4.4.2}焚烧炉 predictor}{34}{subsection.4.4.2}%
+\contentsline {subsection}{\numberline {4.4.3}执行器 predictor}{34}{subsection.4.4.3}%
+\contentsline {subsection}{\numberline {4.4.4}资源 predictor}{35}{subsection.4.4.4}%
+\contentsline {subsection}{\numberline {4.4.5}来料预览 feed preview}{35}{subsection.4.4.5}%
+\contentsline {section}{\numberline {4.5}NMPC 配置参数}{35}{section.4.5}%
+\contentsline {subsection}{\numberline {4.5.1}预测时域与控制分块参数}{35}{subsection.4.5.1}%
+\contentsline {subsection}{\numberline {4.5.2}温度目标与安全边界参数}{36}{subsection.4.5.2}%
+\contentsline {subsection}{\numberline {4.5.3}控制量边界与执行器参数}{36}{subsection.4.5.3}%
+\contentsline {subsection}{\numberline {4.5.4}代价权重参数}{36}{subsection.4.5.4}%
+\contentsline {subsection}{\numberline {4.5.5}恢复模式参数}{37}{subsection.4.5.5}%
+\contentsline {section}{\numberline {4.6}控制分块与优化变量编码}{37}{section.4.6}%
+\contentsline {section}{\numberline {4.7}NMPC rollout 成本计算}{37}{section.4.7}%
+\contentsline {subsection}{\numberline {4.7.1}预热炉到焚烧炉的输入转换}{38}{subsection.4.7.1}%
+\contentsline {subsection}{\numberline {4.7.2}动态含水率目标计算}{38}{subsection.4.7.2}%
+\contentsline {subsection}{\numberline {4.7.3}阶段代价}{39}{subsection.4.7.3}%
+\contentsline {subsection}{\numberline {4.7.4}终端代价与安全诊断}{39}{subsection.4.7.4}%
+\contentsline {section}{\numberline {4.8}初值池、SLSQP 求解与回退}{39}{section.4.8}%
+\contentsline {subsection}{\numberline {4.8.1}初值池}{40}{subsection.4.8.1}%
+\contentsline {subsection}{\numberline {4.8.2}求解诊断}{40}{subsection.4.8.2}%
+\contentsline {subsection}{\numberline {4.8.3}计划缓存与重优化}{40}{subsection.4.8.3}%
+\contentsline {subsection}{\numberline {4.8.4}失败回退}{40}{subsection.4.8.4}%
+\contentsline {section}{\numberline {4.9}异步 NMPC 实现}{41}{section.4.9}%
+\contentsline {section}{\numberline {4.10}执行层实现}{42}{section.4.10}%
+\contentsline {subsection}{\numberline {4.10.1}从参考值到实际命令}{42}{subsection.4.10.1}%
+\contentsline {section}{\numberline {4.11}factory 装配逻辑}{43}{section.4.11}%
+\contentsline {section}{\numberline {4.12}实现边界与当前注意事项}{43}{section.4.12}%
+\contentsline {chapter}{\numberline {第五章\hspace {.3em}}控制器的闭环仿真与测试}{45}{chapter.5}%
+\contentsline {section}{\numberline {5.1}闭环运行结构}{45}{section.5.1}%
+\contentsline {section}{\numberline {5.2}多工况闭环仿真}{47}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}初始化}{47}{subsection.5.2.1}%
+\contentsline {subsection}{\numberline {5.2.2}稳态保持}{48}{subsection.5.2.2}%
+\contentsline {subsection}{\numberline {5.2.3}来料组成变化}{48}{subsection.5.2.3}%
+\contentsline {subsection}{\numberline {5.2.4}临时炉膛温度扰动}{48}{subsection.5.2.4}%
+\contentsline {subsection}{\numberline {5.2.5}永久炉膛温度扰动}{48}{subsection.5.2.5}%
+\contentsline {subsection}{\numberline {5.2.6}安全恢复/冷启动}{48}{subsection.5.2.6}%
+\contentsline {section}{\numberline {5.3}计算延迟与异步运行}{49}{section.5.3}%
+\contentsline {section}{\numberline {5.4}闭环历史记录}{50}{section.5.4}%
+\contentsline {subsection}{\numberline {5.4.1}焚烧炉状态}{50}{subsection.5.4.1}%
+\contentsline {subsection}{\numberline {5.4.2}预热炉与物料状态}{50}{subsection.5.4.2}%
+\contentsline {subsection}{\numberline {5.4.3}控制参考与实际命令}{51}{subsection.5.4.3}%
+\contentsline {subsection}{\numberline {5.4.4}资源与辅助系统}{51}{subsection.5.4.4}%
+\contentsline {subsection}{\numberline {5.4.5}NMPC 与异步诊断}{51}{subsection.5.4.5}%
+\contentsline {subsection}{\numberline {5.4.6}安全恢复诊断}{52}{subsection.5.4.6}%
+\contentsline {section}{\numberline {5.5}测试输出与评价指标}{52}{section.5.5}%
+\contentsline {subsection}{\numberline {5.5.1}温度控制指标}{53}{subsection.5.5.1}%
+\contentsline {subsection}{\numberline {5.5.2}物料与预热炉指标}{53}{subsection.5.5.2}%
+\contentsline {subsection}{\numberline {5.5.3}资源与经济性指标}{53}{subsection.5.5.3}%
+\contentsline {subsection}{\numberline {5.5.4}控制平滑性指标}{54}{subsection.5.5.4}%
+\contentsline {subsection}{\numberline {5.5.5}实时性与可靠性指标}{54}{subsection.5.5.5}%
+\contentsline {subsection}{\numberline {5.5.6}安全恢复指标}{54}{subsection.5.5.6}%
+\contentsline {section}{\numberline {5.6}标准测试场景}{55}{section.5.6}%
+\contentsline {subsection}{\numberline {5.6.1}steady\_hold}{55}{subsection.5.6.1}%
+\contentsline {subsection}{\numberline {5.6.2}feed\_step\_change}{55}{subsection.5.6.2}%
+\contentsline {subsection}{\numberline {5.6.3}furnace\_temp\_temporary\_disturbance}{55}{subsection.5.6.3}%
+\contentsline {subsection}{\numberline {5.6.4}furnace\_temp\_permanent\_disturbance}{55}{subsection.5.6.4}%
+\contentsline {subsection}{\numberline {5.6.5}cold\_start}{56}{subsection.5.6.5}%
+\contentsline {section}{\numberline {5.7}专项测试}{56}{section.5.7}%
+\contentsline {subsection}{\numberline {5.7.1}控制计算延迟测试}{56}{subsection.5.7.1}%
+\contentsline {subsection}{\numberline {5.7.2}SLSQP 求解耗时测试}{56}{subsection.5.7.2}%
+\contentsline {subsection}{\numberline {5.7.3}预热炉时间步长不变性测试}{56}{subsection.5.7.3}%
+\contentsline {section}{\numberline {5.8}闭环测试结果分析}{56}{section.5.8}%
+\contentsline {subsection}{\numberline {5.8.1}稳态保持场景}{57}{subsection.5.8.1}%
+\contentsline {subsection}{\numberline {5.8.2}来料组成阶跃场景}{57}{subsection.5.8.2}%
+\contentsline {subsection}{\numberline {5.8.3}临时炉膛温度扰动场景}{60}{subsection.5.8.3}%
+\contentsline {subsection}{\numberline {5.8.4}永久炉膛温度扰动场景}{60}{subsection.5.8.4}%
+\contentsline {subsection}{\numberline {5.8.5}冷启动场景}{63}{subsection.5.8.5}%
+\contentsline {subsection}{\numberline {5.8.6}综合分析}{63}{subsection.5.8.6}%
+\contentsfinish 
