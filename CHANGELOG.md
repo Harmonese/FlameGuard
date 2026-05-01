@@ -93,3 +93,9 @@ python3.14 -m runtime.tests.run_all_cases
 - 旧版基于 `optimizer/optimizer_lookup_table.csv`、`governor/governor.py` 或 `controller/controller.py` 的集成，需要迁移到 `controller.factory.make_operator()`、`controller.factory.make_state_estimator()` 与 `controller.factory.make_executor()`。
 - 外部 plant 或硬件接入应实现 `domain.interfaces.PlantBackend`，再通过 runtime 与 controller 层对接。
 - 仿真输出默认写入 `runtime/results/`，该目录默认不纳入版本控制。
+
+## [v0.2.1] - 2026-05-01
+
+### Updates
+- 更新了 .gitignore
+- 删除了 `/docs` 路径下的中间文件和冗余文件
