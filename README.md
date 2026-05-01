@@ -1,692 +1,127 @@
-# 稳燃宝（FlameGuard）
-
-稳燃宝（FlameGuard）是一个面向垃圾焚烧预热炉的闭环模型预测控制项目。系统利用主焚烧炉可提供的烟气余热，对进入主焚烧炉前的垃圾进行预热和脱水，并动态优化预热炉换热侧的烟气入口温度 `Tg` 与循环速度 `vg`，使焚烧炉温度、预热炉出口含水率、补热需求、辅助循环需求和风机代价保持在可接受范围内。
-
-项目的默认可运行对象是 Python 低阶 plant。控制器内部维护独立的 Python predictor，用于 NMPC 的快速滚动预测。Plant 与 predictor 是两套实现：plant 表示被控对象或其代理，predictor 表示控制器脑内模型。二者只通过 `domain/` 中的数据结构和接口语义连接。
-
-核心控制目标是：
-
-```text
-主焚烧炉平均温度 T_avg ≥ 850 °C
-主温度目标 T_target = 873 °C
-预热炉出口湿基含水率 omega_b 与炉膛干基质量流率共同决定焚烧炉静态响应
-补热、补风和辅助循环作为允许的运行手段计入代价，而不是直接视为失败
-```
-
----
-
-## 目录结构
-
-```text
-FlameGuard-main/
-├── domain/                 稳定数据契约与接口协议
-│   ├── types.py
-│   └── interfaces.py
-│
-├── plant/                  被控对象 backend
-│   ├── factory.py           PlantBackend 装配入口
-│   ├── python_model/        默认 Python 低阶 plant
-│   ├── comsol/              COMSOL backend 占位
-│   └── hardware/            实机 backend 占位
-│
-├── controller/             控制器
-│   ├── factory.py           estimator / operator / executor 装配入口
-│   ├── estimator/           状态估计与扰动估计
-│   ├── predictor/           控制器内部预测模型
-│   ├── operator/            NMPC / fallback 决策器
-│   └── executor/            控制设定到执行命令的安全适配
-│
-├── runtime/                闭环仿真、测试场景、telemetry、绘图
-│   ├── simulator.py
-│   ├── telemetry.py
-│   ├── plotting.py
-│   └── tests/
-│
-├── scripts/                建模与拟合脚本
-│   ├── fit_furnace_static_surrogate.py
-│   ├── furnace_static_surrogate_fit.json
-│   └── data/furnace_static_comsol/
-│
-├── README.md
-└── CHANGELOG.md
-```
-
----
-
-## 架构边界
-
-### `domain/`
-
-`domain/` 定义跨层共享的数据语言，不包含物理公式或控制算法。主要类型包括：
-
-| 类型 | 作用 |
-|---|---|
-| `FeedstockObservation` | 入口垃圾物性观测，不暴露固定垃圾类别 |
-| `EquivalentProperties` | plant/predictor 内部使用的等效物料性质 |
-| `PreheaterState` | 20 槽预热炉状态 |
-| `PreheaterOutput` | 轻量预热炉出口信息，可用于没有完整 20 槽状态的 backend |
-| `FurnaceFeed` | 进入焚烧炉的质量流率与含水率输入 |
-| `FurnaceObservation` | 焚烧炉观测：`T_avg_C`, `T_stack_C`, `v_stack_mps` |
-| `PlantStepInput` | runtime 发给 plant backend 的一步输入 |
-| `PlantSnapshot` | plant backend 返回的观测快照 |
-| `StateEstimate` | 控制器内部状态估计 |
-| `PredictorBundle` | estimator 管理的 controller-side predictor 对象集合 |
-| `OperatorContext` | operator 每次决策所需的完整上下文 |
-| `ControlSetpoint` | operator 输出给 executor 的参考控制设定 |
-| `ActuatorCommand` | executor 输出给 plant 的实际命令 |
-| `MPCDecision` | NMPC 决策结果与预测摘要 |
-
-### `plant/`
-
-`plant/` 表示外部被控对象。当前默认可运行 backend 是 `plant/python_model/`。COMSOL 与实机接入时，应实现同样的 `PlantBackend` 语义：
-
-```text
-PlantStepInput(command, feedstock, dt)
-        ↓
-PlantBackend.step(...)
-        ↓
-PlantSnapshot(furnace_obs, optional preheater_state, optional preheater_output, resource, feedback, health)
-```
-
-Plant backend 只负责表达外部对象的输入输出。它不实现 NMPC，不持有 controller predictor，也不直接调用 controller operator。
-
-### `controller/`
-
-`controller/` 表示控制器自身。它由四部分组成：
-
-| 模块 | 职责 |
-|---|---|
-| `estimator/` | 从 `PlantSnapshot` 生成 `StateEstimate`，维护 controller-side predictor 状态，估计炉膛扰动 |
-| `predictor/` | 为 NMPC 提供可克隆、可 rollout 的预热炉、焚烧炉、执行器和资源模型 |
-| `operator/` | 根据 `OperatorContext` 做控制决策，默认主控为 block-SLSQP NMPC |
-| `executor/` | 将 `ControlSetpoint` 转换为带限幅、速率、一阶执行器动态和资源诊断的 `ActuatorCommand` |
-
-### `runtime/`
-
-`runtime/` 负责实验编排：构建场景，调用 `plant.factory.make_plant_backend()` 与 `controller.factory` 装配闭环，推进仿真，记录 telemetry，输出 CSV、metrics 和总览图。Runtime 可以了解测试场景，但不再手动实例化 Python plant 的 preheater/furnace/resource 内部模型，也不把 plant 内部模型当作 controller predictor 使用。
-
----
-
-## 闭环顺序
-
-一次闭环采样周期的主流程为：
-
-```text
-Scenario composition schedule
-        ↓  测试适配器
-FeedstockObservation
-        ↓
-PlantStepInput(previous ActuatorCommand, feedstock, dt)
-        ↓
-PythonPlantBackend.step(...)
-        ↓
-PlantSnapshot
-        ↓
-ControllerStateEstimator.update(...)
-        ↓
-StateEstimate + PredictorBundle
-        ↓
-NonlinearMPCController.step_context(OperatorContext)
-        ↓
-MPCDecision / ControlSetpoint
-        ↓
-ControlExecutor.translate_setpoint(...)
-        ↓
-ActuatorCommand
-        ↓
-下一周期 PlantBackend.step(...)
-```
-
-NMPC 内部使用 `controller/predictor/` 做未来 600 s 左右的 rollout。每次优化求得未来多个控制块的 `Tg_ref_C` 和 `vg_ref_mps`，闭环只执行当前时刻的第一段设定。
-
----
-
-## 入口垃圾协议
-
-控制协议使用垃圾物性，而不是固定垃圾类别。`FeedstockObservation` 包含：
-
-```python
-FeedstockObservation(
-    time_s,
-    moisture_wb,
-    drying_time_ref_min,
-    drying_sensitivity_min_per_C,
-    bulk_density_kg_m3=None,
-    wet_mass_flow_kgps=None,
-    source="...",
-    confidence=1.0,
-    raw={...},
-)
-```
-
-字段含义：
-
-| 字段 | 含义 |
-|---|---|
-| `moisture_wb` | 入口湿基含水率，范围 0~1 |
-| `drying_time_ref_min` | 参考干燥时间，单位 min |
-| `drying_sensitivity_min_per_C` | 干燥时间对温度的敏感性，单位 min/°C，通常为负 |
-| `bulk_density_kg_m3` | 垃圾堆积密度，可缺省 |
-| `wet_mass_flow_kgps` | 入口湿垃圾质量流率，可缺省 |
-| `source` | 物性来源，例如 `scenario`, `vision_ai`, `manual`, `lab_measurement` |
-| `confidence` | 物性估计可信度 |
-| `raw` | 原始识别、人工记录或调试数据，只用于日志和排查 |
-
-`runtime/tests/` 中仍使用 6 类垃圾 composition 构造标准场景。composition 只属于测试适配器，进入 plant 和 controller 前会被转换为 `FeedstockObservation`。
+# “稳燃宝”——面向小型垃圾焚烧设施的自适应控温预热系统
 
----
+## 作品内容简介
 
-## 质量流率语义
+本项目针对我国乡镇小型生活垃圾焚烧设施普遍存在的高湿低热值入料、燃烧工况不稳、人工调节粗放、污染物易超标、运维成本高的行业共性痛点，系统性研发了一套面向小型垃圾焚烧设施的自适应控温预热系统。据统计，我国混合生活垃圾厨余占比超55%，整体含水率普遍达50%-70%，入炉热值偏低，而小型焚烧炉存在热惯性小、抗干扰能力弱，极易出现炉膛熄火、温度不达标等问题，现有技术普遍存在“预热不足则干化效果差、预热过度则引发料斗阴燃”的两难困境，且多依赖高额硬件改造，因而难以在基层落地实施。
 
-预热炉入口湿质量流率以日处理量换算为连续质量流：
-
-```text
-wet_mass_flow_kgps = daily_wet_feed_kg / 86400
-```
-
-默认配置为：
-
-```text
-daily_wet_feed_kg = 20000 kg/day
-wet_mass_flow_kgps ≈ 0.2315 kg/s
-```
-
-`SimConfig.wet_mass_flow_override_kgps` 可用于扫描或 what-if 实验。没有 override 时，runtime 使用日处理量公式生成 `FeedstockObservation.wet_mass_flow_kgps`。
-
-预热炉出口质量流率由模型库存计算：
+本作品以我国典型混合生活垃圾为对象，利用垃圾焚烧产生的高温烟气经回流管道对入炉物料进行预热，将物料湿度控制在适宜区间，从而维持焚烧装置的稳定高效运行，形成节能减排的双重效应。通过多因素单变量干燥特性实验，构建垃圾组分占比-预热条件关联数学模型，研发自适应预热控制方案：输入垃圾组分与占比，系统即可自动匹配最优烟气温度与烟气流速，实现入炉垃圾精准干化，同时系统内置多重安全防护机制，采用轻量化模块化设计，无需对焚烧炉主体设备进行改造，即可从源头保障焚烧炉稳定燃烧，操作门槛低，完美匹配基层运维能力。
 
-```text
-dry_out_kgps   = 出口干基质量流率
-water_out_kgps = 出口水分质量流率
-wet_out_kgps   = dry_out_kgps + water_out_kgps
-omega_out      = water_out_kgps / wet_out_kgps
-```
+经理论核算与多工况验证，本方案能有效提升垃圾入炉热值，针对20t/d规模的乡镇焚烧炉，年节约辅助柴油227.5吨，CO₂减排704.1吨，二噁英生成量降低90%以上，年节约运行成本超190万元，为小型焚烧设施提标改造提供了低成本、易落地的解决方案，深度契合国家“双碳”战略与乡村环保治理要求。
 
-焚烧炉输入使用工程变量 `FurnaceFeed`：
-
-```python
-FurnaceFeed(
-    omega_b,
-    mdot_d_kgps,
-    mdot_water_kgps,
-    mdot_wet_kgps,
-    rd,
-)
-```
-
-其中：
-
-```text
-omega_b = 焚烧炉入口湿基含水率
-mdot_d_kgps = 进入焚烧炉的干基垃圾质量流率
-rd = mdot_d_kgps / mdot_d_ref_kgps
-```
+关键词：小型垃圾焚烧；自适应控温；预热干化系统；高湿生活垃圾；稳燃技术；
 
-`rd` 是 COMSOL 静态代理模型的归一化坐标和诊断量。工程分析和图表优先使用 `mdot_d_kgps`。
+## 1 研制背景及意义
 
----
+在国家生态文明建设、乡村振兴战略与“双碳”目标的深度驱动下，完善农村生活垃圾无害化处理体系，已成为补齐乡村环境基础设施短板、推动城乡绿色低碳均衡发展的核心任务之一。当前我国城镇生活垃圾无害化处理体系已趋于成熟，处理率达99.2%，焚烧处理能力达58万吨/日，基本实现城市与县城生活垃圾的全量无害化处理<sup>[1]</sup>，但城乡垃圾处理发展不平衡的问题依然突出，乡村地区垃圾处理仍存在显著的结构性短板<sup>[2]</sup> ，与城市的生活垃圾排放情况相比，农村生活固体垃圾排放量增长更快<sup>[3]</sup>。我国乡村生活垃圾以高湿厨余垃圾、农业废弃物为主要组分，整体含水率普遍在50%-70%之间，厨余占比超55%，根据生活垃圾焚烧行业通用规律，垃圾含水率每升高1%，湿基低位热值便降低118.7kJ/kg<sup>[4]</sup>，这也导致乡村原生垃圾湿基低位热值普遍不足3500kJ/kg，远无法达到《城市生活垃圾处理及污染防治技术政策》规定的5000kJ/kg自持燃烧最低阈值<sup>[5]</sup>，无法满足焚烧炉稳定运行的基础要求。受乡村地区人口分布分散、收运半径大的客观条件限制，日处理5-20t的小型焚烧炉是乡村垃圾就地就近处理性价比最高的装备选择，但此类炉型热惯性极小，对入炉垃圾的热值、含水率波动敏感度极高，低热值、高水分的原生垃圾直接入炉，极易引发炉膛温度剧烈波动、频繁熄火，进而造成黑烟、CO、二噁英等污染物超标排放，难以满足环保管控要求。当前行业内针对高湿垃圾的预热预处理技术，始终未能破解核心两难困境：低温预热无法实现有效脱水，难以达到焚烧稳燃的热值要求；高温预热则易引发垃圾提前碳化、料斗阴燃着火，存在显著安全隐患，且现有技术多为人工经验式的粗放操作，缺乏针对不同垃圾组分的自适应调节能力，无法将复杂多变的乡村垃圾稳定预处理至适宜入炉的状态，难以在基层场景落地。与此同时，乡村地区普遍缺少专业的环保运维技术人员，现有的预处理系统与智能焚烧装置运维门槛高，导致大量已建成的小型焚烧设施无法实现稳定规范运行，普遍陷入“建得起、运不好、修不起”的恶性循环，与国家乡村环境治理的目标要求存在显著差距。
 
-## Python plant 建模
+当前，国家出台的多项政策文件为乡村垃圾处理技术创新与设施升级规定了明确方向与硬性要求。国务院办公厅印发的《“十四五”城镇生活垃圾分类和处理设施发展规划》明确提出，要推动县级地区生活垃圾焚烧处理设施覆盖范围向建制镇和乡村延伸，重点推进既有焚烧设施提标改造与小型焚烧设施试点示范；《生活垃圾焚烧污染控制标准》（GB18485-2014）也作出强制规定，要求焚烧炉炉膛主燃区温度需稳定维持在850℃以上<sup>[6]</sup>，烟气停留时间不低于2秒，从环保层面划定了焚烧稳燃的硬性红线。据行业公开统计数据，截至2025年底，我国已建成投运的乡镇级小型生活垃圾焚烧设施超1200座，且每年仍有数百座新增设施落地，其中90%以上的在运设施均面临稳燃难、运维难、达标难的核心痛点，当前市场中适配乡村基层场景、低成本、低运维门槛、可破解预热技术核心困境的专属解决方案供给严重不足，刚性市场需求与技术供给缺口之间的矛盾突出，仍存在广阔的技术提升与推广空间。
 
-`plant/python_model/` 包含默认被控对象模型。
+如上所述，在国家政策强力引导、乡村垃圾处理需求迫切、现有技术存在明显短板的三重背景下，开展乡村垃圾预处理技术研究与装备开发，不仅具有重要的理论价值和实践意义，也是响应国家战略需求、推动产业技术进步的重要举措。
 
-### 预热炉
+本项目旨在通过技术创新，从以下三个维度缓解小型焚烧炉运行不稳定、污染物排放不达标、运维难度大等行业痛点，进一步完善乡村垃圾处理体系，为实现双碳目标做出贡献。
 
-预热炉由 `PreheaterForwardModel` 表示，是一个 20 槽轴向分布模型。每个 cell 保存：
+### 1）节能：降低化石燃料依赖，缓解运营压力
 
-```text
-omega
-T_solid_C
-omega0
-tref_min
-slope_min_per_C
-dry_mass_kg
-water_mass_kg
-bulk_density_kg_m3
-residence_left_s
-```
+本项目研发的预处理装置可使垃圾含水率稳定下降，显著提升入炉垃圾低位热值，使其满足5000kJ/kg标准，大幅减少柴油、天然气等化石辅助燃料的使用，间接缓解乡村垃圾处理的资金压力，契合双碳战略中降低化石能源消耗的核心要求，提升生物质能源利用率。
 
-主要过程包括：
+### 2）减排：稳定燃烧状态，降低污染物排放
 
-1. feed delay：入口垃圾物性存在约 5 s 进入延迟；
-2. 轴向输送：用 residence time 将垃圾从 cell 0 推向 cell 19；
-3. 逆流烟气换热：默认烟气从出口侧向入口侧流动；
-4. 显热升温与潜热蒸发：100°C 以下优先升温，到达蒸发条件后脱水；
-5. 出口质量流率诊断：输出干基、水分和湿基质量流率。
+本项目预处理装置通过精准调控垃圾温度、湿度等关键指标，确保入炉垃圾状态均匀稳定，保障炉膛温度持续维持在国家标准文件要求的850℃以上，延长烟气停留时间，有效抑制污染物生成和排放，解决小型生活垃圾焚烧装备烟气处理不达标问题。
 
-当前低阶预热炉代理模型允许垃圾继续深度干燥，残余湿基含水率下限为 `omega_min = 0.05`。这个下限只用于避免数值上出现完全无水或负水分，并不再把出口含水率硬限制在 20%。plant 和 controller predictor 使用相同默认值；未来如果需要更保守或更激进的干燥能力，应同时调整两侧配置。
+### 3）延寿：减少设备损耗，保障长效运行
 
-### 焚烧炉
+本项目通过标准化预处理工艺，为焚烧炉提供稳定均一的进料，显著减轻热冲击对炉膛的损害，延长小型焚烧炉使用寿命，缓解乡村地区“建得起、运不好”的运维难题，保障小型焚烧设施长期稳定运行，为乡村垃圾无害化处理模式落地提供坚实支撑。
 
-焚烧炉由静态 COMSOL surrogate 加低阶动态壳组成。
+## 2 技术路线
 
-静态输入为：
+本项目以破解乡镇小型垃圾焚烧炉高湿低热垃圾稳燃难的核心痛点为目标。技术路线图详见附件2首先通过系统的多因素单变量干燥特性实验，探明不同加热条件下乡村典型生活垃圾的干燥规律，构建垃圾组分与干燥特性的专属数据库，为控制方案奠定核心数据基础；其次基于实验数据库，研发“实验数据规则匹配+PID动态修正”的自适应预热控制算法，实现不同垃圾组分工况下烟气流速与温度的精准匹配，同时内置多重安全防护机制，破解预热不足与预热过度的行业两难困境；随后依托COMSOL Multiphysics多物理场平台，搭建干燥预热 - 炉膛稳燃全耦合仿真架构，完成多典型工况下方案适用性与稳燃效果的闭环验证与参数优化；最终通过系统的理论核算，量化方案的节能、减排、碳减排与综合经济效益，形成一套低成本、无硬件改造、易运维、可快速复制的乡镇小型焚烧炉预热稳燃解决方案。
 
-```text
-omega_b                 焚烧炉入口湿基含水率
-mdot_d_furnace_kgps     进入焚烧炉的干基质量流率
-```
+## 3 设计方案
 
-内部将 `mdot_d_furnace_kgps` 转换为：
+面向小型垃圾焚烧设施的自适应控温预热系统 “稳燃宝”，是针对我国乡村地区生活垃圾含水率高、组分波动大、小型焚烧设施燃烧不稳定、能耗偏高、污染物易超标等痛点研发的一体化解决方案。系统以预热炉装备、自适应控制系统、前端智能操控平台为三大核心构成，依托完整实验支撑与模型验证，通过预热脱水、精准控温、智能调控协同作用，实现垃圾稳定燃烧、能源高效利用与污染物减排。本说明书对系统整体架构、装备设计、控制逻辑、实验依据与操作使用进行系统性阐述，完整呈现技术成果与工程应用方式。
 
-```text
-rd = mdot_d_furnace_kgps / mdot_d_ref_kgps
-```
+### 3.1 预热炉结构设计与工作原理（设计思路详见附件6）
 
-静态输出包括：
+预热炉为系统核心执行装备，采用卧式回转筒体式结构，以焚烧炉高温烟气作为热源，在垃圾进入焚烧炉前完成可控预热脱水，提升低位热值并保障稳定燃烧。炉体外部包覆高性能保温层，降低热量散失；内部沿周向均匀布置六根内置导烟管，配合外夹套形成双通路换热结构，显著增大换热面积与传热效率。筒体由回转支承与驱动机构带动低速旋转，使垃圾在筒体内连续翻动、均匀受热，避免局部堆积、干燥不均或局部过热。
 
-```text
-T_avg_C
-T_stack_C
-v_stack_mps
-T_surface_min_C
-T_surface_max_C
-T_surface_std_C
-```
+设备两端分别设置密封式进料口与出料口，保证连续稳定运行；炉体预留标准化测温、测压、测流接口，配套清灰、排水与检修结构，满足长期运维与安全监测需求。整体设计遵循低温高效脱水、不碳化、无提前着火原则，可将垃圾含水率稳定控制在最优燃烧区间，实现预热与焚烧的能量梯级利用，适配 20t/d 级小型垃圾焚烧设施新建配套与现有设备改造。
 
-动态壳保留：
+### 3.2 核心实验基础与数据支撑
 
-```text
-5 s dead time
-0.223 s fast lag
-75.412 s slow lag
-```
+本系统全部设计参数均来自自主搭建的垃圾干燥实验平台，通过多工况干燥实验建立完整数据体系（具体实验见附件3），为预热温度、控制策略、结构优化提供科学依据。实验采用0.1℃高精度烘箱与0.001g 高精度电子天平，对菜叶、西瓜皮、橙皮、肉类、混合垃圾等乡村典型组分开展全因子实验，测得初始含水率、干燥速率、温度敏感性等关键特性。实验结果表明：菜叶初始含水率高达 94.8%，肉类仅 44.2%；西瓜皮干燥最慢，肉类干燥最快；不同组分温度敏感性差异显著。基于上述实验结果，团队构建垃圾组分–干燥特性关联数据库，为自适应控制提供精准输入，确保系统面对波动工况仍可稳定匹配最优预热参数。
 
-这使焚烧炉不会瞬时跳到静态代理输出，而是保留温度和烟囱响应的低阶动态。
+![](assets/image1.png)
 
-### 烟气资源
+图1 结论可视化分析：组分差异、动力学差异与温度响应差异
 
-`ResourceModel` 从 `FurnaceObservation` 计算自然烟气资源：
+### 3.3 自适应控制系统组成与运行逻辑（设计思路详见附件5）
 
-```text
-T_stack_available_C
-v_stack_available_mps
-mdot_stack_available_kgps
-```
+自适应控制系统为预热炉提供全流程智能决策与精准执行能力，采用 MPC 模型预测控制架构，解决垃圾组分多变导致的控制滞后、精度不足等问题。系统自上而下分为数据感知层、模型决策层、执行控制层，形成闭环控制体系。
 
-执行器使用这些资源做补热和辅助循环诊断。当前语义为：
+![](assets/image2.png)
 
-| 指标 | 含义 |
-|---|---|
-| `aux_heat_enable` | 自然烟气温度不足，需要辅助补热 |
-| `Q_aux_heat_kW` | 补热功率估计 |
-| `mdot_aux_flow_kgps` | 自然烟气质量流量不足时的辅助循环需求 |
-| `fan_circulation_power_kW` | 循环速度对应的风机/循环功率诊断 |
-| `aux_resource_required` | 存在补热或辅助循环需求的综合标记 |
+图2 MPC 模型预测控制架构
 
-`aux_resource_required` 不等价于控制失败。厨余垃圾高湿工况下，补热、补风和辅助循环可以是正常运行方式。Metrics 中同时输出 `aux_heat_required_ratio`、`aux_circulation_required_ratio` 和 `command_hard_clipped_by_resource_ratio`，用于区分运行成本与命令硬削弱。
+数据感知层通过传感器实时采集炉温、烟气流速、垃圾组分、含水率等运行参数，并接收焚烧炉反馈信号，为控制决策提供依据。模型决策层依托实验建立的垃圾组分–干燥特性关联数据库，结合预热脱水模型、焚烧稳燃模型与 COMSOL 多物理场仿真结果，通过非线性多目标三级优化算法，以入口烟气温度、烟气流速为控制变量，在满足停留时间、供热能力、安全温度等约束条件下，依次实现含水率逼近目标值、燃烧状态均匀化、系统能耗最小化。执行控制层根据最优决策自动调节阀门开度、供热强度与筒体转速，以前馈 + 反馈协同方式快速响应工况波动。
 
----
+![](assets/image3.png)
 
-## Controller predictor
+图3 MPC模型控制预测结构图
 
-`controller/predictor/` 是控制器内部模型，包含与 plant 相同类别的模块：预热炉、焚烧炉、执行器、资源、物料和热工公式。它们是 controller 自己的实现，不从 `plant/python_model/` import。
+系统严格遵循国标要求，将炉膛温度稳定控制在850℃–900℃，确保二噁英充分分解；冷启动至稳态时间小于 200 秒，控制响应速度较传统 PID 提升约 10 倍，实现高效、稳定、低碳运行。
 
-Predictor 的职责是：
+![](assets/image4.png)
 
-```text
-从 StateEstimate 初始化控制器内部状态
-在 NMPC 中克隆
-按候选 Tg/vg 控制序列 rollout
-提供未来 T_avg、omega_out、资源需求和经济代价
-```
+图3 冷启动闭环控制效果
 
-Plant 与 predictor 使用相同接口语义，但允许参数和实现逐步分化。模型失配通过 estimator、扰动观测器和闭环反馈处理。
+### 3.4 前端智能控制平台操作与使用说明
 
----
+前端智能控制平台为可视化人机交互界面，面向乡村基层运维人员设计，具备操作简洁、参数直观、模式智能等特点，实现预热系统全流程监视、控制与管理。平台集成六大核心功能模块：垃圾组分设定、炉内状态实时监视、炉膛 3D 模型预览、运行参数展示、计算监控与结果修正、节点温度对比。
 
-## State estimator
+使用时，操作人员可在组分设定界面输入菜叶、西瓜皮、橙子皮、混合垃圾等比例数据；系统自动完成优化计算并下发控制指令。运行参数区实时显示平均炉温、烟气温度、烟气流速、物料温度、目标含水率等关键指标；计算监控模块自动完成约束核验、优化结果输出与偏差跟踪，支持自动 / 手动模式切换。节点温度柱状图实时呈现关键点位温度分布，便于工况判断与异常预警。平台支持全自动反馈运行，大幅降低人工干预频率，提升系统稳定性与易用性，满足乡村小型垃圾焚烧设施长期可靠运行需求。
 
-`controller/estimator/state_estimator.py` 定义 `ControllerStateEstimator`。它负责：
+![](assets/image5.png)
 
-```text
-PlantSnapshot → StateEstimate
-```
+图4 监控平台前端页面
 
-它始终向 operator 提供可预测的 20 槽 `preheater_state_est`。
+## 4 效益评估
 
-如果 plant snapshot 包含完整 `PreheaterState`，estimator 将其同步到 controller predictor。若没有完整 20 槽状态，estimator 使用 controller-side predictor digital twin，根据上周期实际命令或 actuator feedback 推进内部状态。
+以国内主流的日处理20t乡镇小型生活垃圾焚烧炉为核算基准，结合项目干燥特性实验结果与生活垃圾焚烧行业通用设计参数，对本自适应预热控制方案的节能减碳、污染物减排及综合经济效益开展系统量化核算。所有核算结果均基于单炉满负荷、全年365天连续运行的理论工况得出。
 
-Estimator 还维护：
+经核算，本方案通过预热干化处理可将原生垃圾湿基低位热值提升约38%，有效填补了高湿原生垃圾与自持燃烧阈值之间的核心热值缺口，大幅削减焚烧炉辅助燃料消耗量，应用于20t/d规模乡镇焚烧炉时，可将0号柴油日消耗量由704.2kg降至80.9kg，全年可节约0号柴油227.5吨，显著降低焚烧炉助燃能耗；基于化石燃料消耗量的削减，本方案全年可实现CO₂减排704.1吨，有效降低乡镇生活垃圾处理环节的碳排放强度，深度契合国家“双碳”战略发展要求。
 
-```text
-preheater_predictor
-furnace_predictor
-resource_model
-disturbance_observer
-```
+在污染物管控方面，本方案可使焚烧炉主燃区温度稳定，既满足了生活垃圾焚烧污染控制的国标强制要求，也从源头实现了特征污染物的有效抑制，全年可减排二噁英0.036g TEQ，排放强度稳定控制在国标限值0.1ng TEQ/Nm³以内，较不稳定燃烧工况减排幅度达90%以上；同时炉温稳定大幅提升了垃圾燃烧完全度，有效减少了不完全燃烧产物的生成，全年可减排一氧化碳61.32吨，显著降低了焚烧设施的污染物排放负荷。
 
-并通过 `get_predictor_bundle()` 交给 operator 使用。
+经济效益层面，本方案为纯软件化控制升级方案，无需对焚烧炉主体设备进行硬件改造，前期投入极低，核心收益来自燃料成本与运维成本的双重节约。其中，按柴油市场均价8000元/吨计算，全年节约柴油对应燃料成本节约达182万元；同时炉温长期稳定消除了频繁熄火、炉膛热冲击带来的耐火材料损耗与设备检修成本，可降低15%的运维成本，全年运维成本节约约11万元，综合核算下来，单台20t/d规模焚烧炉应用本方案后，全年可节约综合运行成本约193万元，前期投入可在极短周期内完全收回，具备极强的经济效益与商业推广价值。
 
----
+## 5 创新点
 
-## NMPC operator
+本产品所研究的主要内容，主要的创新点有：
 
-主控器为 `controller/operator/nmpc_operator.py` 中的 `NonlinearMPCController`。它是 control-blocking NMPC，默认设置包括：
+1）数据驱动控制：基于自主干燥实验，首次建立一个精准的组分-参数直接映射模型。基于实际垃圾组分实时输出最优预处理方案，告别人工凭经验判断的主观性与滞后性，实现预处理过程的智能化控制。
 
-| 参数 | 默认值 |
-|---|---:|
-| prediction horizon | 600 s |
-| decision grid | 20 s |
-| rollout substep | 5 s |
-| control blocks | 0-120, 120-300, 300-480, 480-600 s |
-| reoptimize period | 60 s |
-| temperature target | 873 °C |
-| compliance lower bound | 850 °C |
+2）仿真闭环验证：构建垃圾预处理仿真体系，提前验证预处理方案对焚烧炉稳燃效果的提升作用。在工程落地前识别潜在风险，优化参数设置，降低实体实验与设备改造的试错成本，缩短项目落地周期。
 
-决策变量为每个控制块的：
+3）自适应匹配：研发自适应控制算法，根据输入的垃圾组分占比等基础信息自动计算并输出最优烟气流量与物料停留时间组合，适配全工况场景。
 
-```text
-Tg_ref_C
-vg_ref_mps
-```
+## 6 应用前景
 
-Rollout 中每一步执行：
+1）适用场景广泛：适配全国乡镇小型垃圾焚烧炉，针对中西部偏远镇村处理资源不足的需求，可直接配套新建设施。同时可应用于既有小型焚烧炉的智能化升级，无需大规模改造设备本体，通过控制模块加装即可实现性能提升。
 
-```text
-candidate Tg/vg
-        ↓
-actuator dynamics + resource accounting
-        ↓
-preheater predictor step
-        ↓
-FurnaceFeed from preheater output
-        ↓
-furnace predictor step
-        ↓
-stage cost
-```
+2）落地优势显著：加装无需额外增加高额硬件投入，实现低成本升级；部署流程简单，基层工作人员无需专业技术背景即可操作，契合乡镇运维现状。搭配仿真闭环验证机制，护航项目落地，打破技术门槛限制，助力政策要求在基层有效落地。
 
-代价函数主要包含：
+3）市场价值高：我国乡镇小型焚烧设施存量庞大，且“十四五”规划明确推动县级地区焚烧设施向乡村延伸，市场需求持续释放。本项目提供的低成本、易部署、高适配的控制方案，可快速响应存量设施升级与新建项目配套需求，推广潜力巨大，对完善乡村垃圾处理体系具有重要意义。
 
-```text
-T_avg tracking
-reference band penalty
-safety band penalty
-dynamic omega target penalty
-auxiliary heat cost
-auxiliary circulation cost
-fan/circulation cost
-high-vg cost
-control movement cost
-terminal T_avg penalty
-```
+## 参考文献
 
-安全恢复区间采用状态依赖权重：当预测 `T_avg` 接近或低于 850 °C 合规下限时，NMPC 会显著降低补热、辅助循环、风机和高 `v_g` 的经济惩罚，同时提高低温安全惩罚。这让控制器在低温扰动后更果断地使用 1100 °C 辅助烟气和最大循环速度；回到安全区后再恢复经济运行权衡。
+1.  中华人民共和国国务院.“十四五”城镇生活垃圾分类和处理设施发展规划[M]. 北京：中华人民共和国国务院,2021.
 
-### 动态含水率目标
+2.  中华人民共和国住房和城乡建设部.对十四届全国人大第二次会议第5021号建议的答复 (建城函〔2024〕84 号)[EB/OL]. 北京:中华人民共和国住房和城乡建设部,2024.
 
-`omega_target` 由温度目标、当前预测干基质量流率和扰动估计反算：
+3.  蒋培,胡榕.农村生活垃圾分类存在的问题、原因及治理对策[J.学术交流2021(2):146-156.
 
-```text
-omega_target_from_T = inverse_surrogate(T_target_C - disturbance_est_Tavg_C, mdot_d_furnace_kgps)
-```
+4.  李剑颖.基于多元线性回归的生活垃圾热值影响因素分析[J].环境卫生工程,2019,27(4): 35-40.
 
-因此水分目标随焚烧炉干基负荷和炉内扰动估计改变，而不是固定在某个旧参考含水率。负向永久扰动会要求更低的出口含水率。
+5.  中华人民共和国住房和城乡建设部,国家环境保护总局,科学技术部.城市生活垃圾处理及污染防治技术政策(建城〔2000〕120号)[M].北京：中华人民共和国住房和城乡建设部,2000.
 
-NMPC 还记录安全恢复诊断：
-
-```text
-safety_reachable           当前优化轨迹的 terminal T_avg 是否高于安全下限
-safety_margin_C            terminal predicted T_avg - T_safe_low_C
-omega_max_for_safety       在当前扰动估计和干基负荷下，达到安全下限所允许的最大出口含水率
-nmpc_pred_min/max_Tavg_C   预测视界内最低/最高炉温
-```
-
-当实测 `T_avg` 低于安全下限时，operator 不再无条件持有旧计划到完整 `reoptimize_s`，而是按 `emergency_reoptimize_interval_s` 触发更短间隔的 best-effort re-optimization。低温恢复时，NMPC 的初始候选还会显式加入 `Tg = Tg_max`、`vg = vg_max` 的全力恢复 seed，避免 SLSQP 在早期迭代里缓慢摸索最大恢复动作。
-
----
-
-## Executor
-
-`controller/executor/executor.py` 将 `ControlSetpoint` 转换为实际 `ActuatorCommand`。执行器包含：
-
-```text
-Tg rate limit
-vg rate limit
-Tg first-order lag
-vg first-order lag
-Tg/vg bounds
-auxiliary heat accounting
-auxiliary circulation accounting
-fan/circulation power diagnostic
-```
-
-Plant 接收的是 executor 输出的 `ActuatorCommand`，不是 operator 原始参考值。
-
-Executor 还包含安全恢复 guard：当 runtime 判定实测炉温低于合规下限，或当前 NMPC 预测安全不可达且温度仍低于目标时，executor 会把参考值提升到 `1100 °C / 12 m/s` 并标记 `recovery_guard_active`。这是控制安全层的兜底动作，用于避免低温事件中等待经济 NMPC 缓慢加热；其触发比例会写入 telemetry 和 metrics。
-
----
-
-## Runtime 测试与输出
-
-标准测试入口位于 `runtime/tests/`。
-
-运行单个 case：
-
-```bash
-python -m runtime.tests.test_case_steady_hold
-python -m runtime.tests.test_case_feed_step_change
-python -m runtime.tests.test_case_furnace_temp_temporary_disturbance
-python -m runtime.tests.test_case_furnace_temp_permanent_disturbance
-python -m runtime.tests.test_case_cold_start
-```
-
-运行全部标准 case：
-
-```bash
-python -m runtime.tests.run_all_cases
-```
-
-每个 case 的输出目录为：
-
-```text
-runtime/results/<case_name>/
-├── overview.png
-├── timeseries.csv
-├── metrics.csv
-├── control_events.csv
-├── preheater_diagnostics.csv
-└── cell_snapshot.csv
-```
-
-`overview.png` 包含 6 个 panel：
-
-```text
-furnace thermal response
-preheater outlet / heat-transfer diagnostics
-operator reference vs executor command
-stack resource / auxiliary heat / fan power
-disturbance observer
-cell snapshots
-```
-
-`metrics.csv` 按 full、tail、event、post_event、recovery 等时间片统计：
-
-```text
-Tavg mean/min/max/RMSE
-ratio_in_ref_band
-ratio_T_ge_compliance_min
-omega_out mean/min/max
-mdot_furnace_dry_mean_kgps
-rd_used_mean
-omega_target_from_T_mean
-aux heat energy
-aux flow mean/max
-fan energy
-operator fallback ratio
-recovery guard ratio
-resource and auxiliary resource ratios
-command total variation
-```
-
----
-
-## COMSOL 焚烧炉静态代理
-
-`scripts/fit_furnace_static_surrogate.py` 用 COMSOL 批跑 CSV 拟合焚烧炉静态代理。
-
-输入数据目录：
-
-```text
-scripts/data/furnace_static_comsol/
-```
-
-拟合报告：
-
-```text
-scripts/furnace_static_surrogate_fit.json
-```
-
-CSV 中温度单位为 K。脚本拟合前将温度输出转换为 °C；温度标准差按温差处理，K 与 °C 数值一致。
-
-静态代理使用二维三阶多项式：
-
-```text
-y = f(rd, omega_b)
-```
-
-COMSOL 扫描范围：
-
-```text
-rd      = 0.5 ~ 3.5
-w_b     = 0 ~ 50 %
-omega_b = w_b / 100
-```
-
-当前拟合误差摘要：
-
-| 输出 | train RMSE | LOO RMSE |
-|---|---:|---:|
-| `T_avg_C` | 0.763 °C | 1.009 °C |
-| `T_stack_C` | 2.223 °C | 3.065 °C |
-| `v_stack_mps` | 0.021 m/s | 0.032 m/s |
-| `T_surface_min_C` | 3.679 °C | 5.260 °C |
-| `T_surface_max_C` | 0.708 °C | 0.942 °C |
-| `T_surface_std_C` | 0.784 °C | 1.086 °C |
-
-重新拟合：
-
-```bash
-python scripts/fit_furnace_static_surrogate.py
-```
-
----
-
-## 配置重点
-
-常用配置位于 `runtime/simulator.py::SimConfig` 和 `controller/operator/nmpc_operator.py::NMPCConfig`。
-
-| 配置 | 含义 | 默认值 |
-|---|---|---:|
-| `daily_wet_feed_kg` | 日处理湿垃圾质量 | 20000 kg/day |
-| `wet_mass_flow_kgps` | 连续湿垃圾质量流率，派生属性 | `daily_wet_feed_kg / 86400` |
-| `wet_mass_flow_override_kgps` | 质量流率扫描 override | `None` |
-| `T_target_C` | 主温度目标 | 873 °C |
-| `T_compliance_min_C` | 合规温度下限 | 850 °C |
-| `omega_ref` | 初始化兼容参考含水率 | 0.3218 |
-| `preheater_omega_min` / `OMEGA_MODEL_MIN` | 预热炉代理模型允许的残余湿基含水率下限；当前允许深度干燥但保持大于 0 | 0.05 |
-| `nominal_Tg_C` | 初始化/nominal 控制温度 | 800 °C |
-| `nominal_vg_mps` | 初始化/nominal 循环速度 | 12 m/s |
-| `preheater_warmup_s` | 预热炉库存 warmup 时间 | 6 residence times |
-| `nmpc_horizon_s` | NMPC 预测视界 | 600 s |
-| `nmpc_rollout_dt_s` | NMPC 内部 rollout 步长 | 5 s |
-| `nmpc_maxiter` | SLSQP 最大迭代次数 | 20 |
-| `emergency_reoptimize_interval_s` | 安全线以下的紧急重优化间隔 | 20 s |
-| `recovery_trigger_margin_C` | 预测温度进入安全恢复区间的提前量 | 20 °C |
-| `recovery_guard_exit_C` | recovery guard 退出滞回温度；避免在 850 °C 附近反复开关 | 865 °C |
-| `recovery_guard_min_hold_s` | recovery guard 进入后的最小保持时间 | 60 s |
-| `recovery_economy_multiplier` | 安全恢复区间内补热/补风/高风速经济代价倍率 | 0.02 |
-| `aux_Tg_max_C` | 补热后的有效 Tg 上限 | 1100 °C |
-| `compute_latency_mode` | 是否把控制器 wall-clock 求解耗时反馈到 plant 仿真时间；`none` 为理想仿真，`profile` 用实测耗时，`fixed` 用固定延迟 | `none` |
-| `fixed_compute_latency_s` | `compute_latency_mode="fixed"` 时每次控制更新的命令应用延迟 | 0 s |
-
----
-
-## 扩展 backend
-
-### COMSOL backend
-
-`plant/comsol/backend.py` 应实现 `PlantBackend` 语义。COMSOL backend 负责：
-
-```text
-ActuatorCommand → COMSOL 边界条件
-FeedstockObservation → 入口物料边界
-transient solve → PlantSnapshot
-```
-
-返回的 `PlantSnapshot` 至少应包含 `FurnaceObservation`。若 COMSOL 可以输出预热炉场变量，可投影成 `PreheaterState`；若只输出出口量，可填 `PreheaterOutput`。
-
-### Hardware backend
-
-`plant/hardware/backend.py` 应把 `ActuatorCommand` 写入 PLC / OPC-UA / Modbus / DAQ / TCP 等接口，并从传感器读取：
-
-```text
-T_avg_C
-T_stack_C
-v_stack_mps
-optional preheater outlet measurement
-actuator feedback
-health/status
-```
-
-硬件 backend 通常不能提供完整 20 槽状态。Estimator 会用 controller-side predictor digital twin 维护可用于 NMPC 的 `preheater_state_est`。
-
----
-
-## 开发约束
-
-1. `plant/python_model/` 与 `controller/predictor/` 保持两套实现，不抽 shared physics core。
-2. `controller/` 不 import `plant/python_model/`。
-3. `plant/` 不 import `controller/`。
-4. `runtime/` 负责装配和实验编排，不承担控制算法或物理公式所有权。
-5. `FeedstockObservation.raw` 只用于日志和排查，operator 不依赖 raw 字段。
-6. `rd` 是 COMSOL surrogate 坐标和诊断量，工程主变量为 `mdot_d_furnace_kgps`。
-7. 补热、补风、辅助循环是允许的运行方式，合规评价优先看 `T_avg ≥ 850 °C`、fallback、stale plan 和命令硬削弱。
-8. 后台 async NMPC 可以接受 SLSQP `success=False` 但代价有限、动作有界的 best-effort plan；`feasible` 表示优化器收敛状态，不等同于 plan 是否可执行。
-9. recovery guard 是 executor 安全层，采用滞回和最小保持时间，避免温度在安全线附近抖动时反复开关。
-
----
-
-## 快速检查
-
-编译检查：
-
-```bash
-python -m compileall domain plant controller runtime scripts
-```
-
-预热炉步长诊断：
-
-```bash
-python -m runtime.tests.test_preheater_timestep_invariance
-```
-
-控制延迟诊断：
-
-```bash
-python -m runtime.tests.test_control_latency
-```
-
-同步 SLSQP 求解耗时诊断：
-
-```bash
-python -m runtime.tests.test_slsqp_solve_latency
-```
-
-默认参数使用短视界和低迭代数，便于快速确认 SLSQP 分段耗时；如需测试当前完整 NMPC 配置，可加 `--full-config`。
-
-计算耗时对闭环效果的影响诊断：
-
-```bash
-python -m runtime.tests.test_compute_latency_effect --delays 0,2,5,10,30
-```
-
-默认 runtime 是理想仿真：控制器求解消耗的真实 wall-clock 时间不会推进 plant。打开 `compute_latency_mode="profile"` 或 `"fixed"` 后，runtime 会在新命令生效前让 plant 继续按旧命令运行相应的模拟时间，并在 CSV/metrics 中输出 `operator_compute_wall_s`、`simulated_compute_latency_s`、`command_apply_delay_s`、`async_*plan*` 等诊断字段。
-
-steady hold：
-
-```bash
-python -m runtime.tests.test_case_steady_hold
-```
-
+6.  中华人民共和国环境保护部,中华人民共和国国家质量监督检验检疫总局.生活垃圾焚烧污染控制标准 (GB 18485-2014)[S]. 北京:中国环境科学出版社,2014.
