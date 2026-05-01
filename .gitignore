@@ -6,3 +6,4 @@ runtime/results/
 *.log
 *.out
 *.synctex.gz
+*.toc
